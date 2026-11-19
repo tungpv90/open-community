@@ -33,7 +33,7 @@ create table if not exists public.forum_tags (
 
 create table if not exists public.forum_discussions (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid not null references public.forum_profiles(id) on delete cascade,
   title text not null check (char_length(title) between 6 and 140),
   slug text not null unique,
   content text not null check (char_length(content) >= 10),
@@ -56,7 +56,7 @@ create table if not exists public.forum_discussion_tags (
 create table if not exists public.forum_posts (
   id uuid primary key default gen_random_uuid(),
   discussion_id uuid not null references public.forum_discussions(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid not null references public.forum_profiles(id) on delete cascade,
   number integer not null,
   content text not null check (char_length(content) >= 1),
   like_count integer not null default 0,
