@@ -1,48 +1,91 @@
-# Cộng Đồng Việt
+# Flarum Community
 
-Diễn đàn Node.js kiểu Flarum, chạy trên OpenAI Sites và tích hợp Supabase Auth/PostgREST.
+A lightweight Flarum-inspired community forum with a Node.js runtime, Supabase authentication, a complete administration interface, Docker deployment, and OpenAI Sites compatibility.
 
-## Kết nối Supabase
+## Features
 
-1. Chạy `supabase-schema.sql` trong đúng Supabase project của `E:\paddle-nextjs-starter-kit`.
-2. Cấu hình hai biến môi trường Site: `SUPABASE_URL` và `SUPABASE_ANON_KEY`.
-3. Triển khai lại phiên bản đã lưu để áp dụng environment revision.
+- Discussion feed, tags, search, sorting, replies, likes, follows, notifications, and dark mode.
+- Administration for users, groups, permissions, tags, moderation, appearance, email, extensions, and advanced settings.
+- Shared Supabase accounts with the `paddle-nextjs-starter-kit` project through `auth.users` and `public.user_roles`.
+- Demo mode backed by browser storage when Supabase is not configured.
+- Production-ready Docker image running as a non-root user with a read-only filesystem and health checks.
 
-Forum dùng chung `auth.users` và `public.user_roles` của starter kit. Các bảng `forum_*` chỉ bổ sung hồ sơ, bài viết, tag, quyền và dữ liệu quản trị; không tạo hệ tài khoản khác.
+## Requirements
 
-Khi chưa có hai biến môi trường, website chạy ở chế độ demo bằng localStorage.
+- Node.js 20 or newer for local development.
+- Docker Engine with Docker Compose for container deployment.
+- A Supabase project for persistent accounts and forum data.
 
-## Node.js
+## Configuration
+
+Copy the example file and provide the same public Supabase credentials used by the `paddle-nextjs-starter-kit` project:
+
+```sh
+cp .env.example .env
+```
+
+```dotenv
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-public-anon-key
+FORUM_PORT=3000
+```
+
+Run [supabase-schema.sql](./supabase-schema.sql) against that Supabase project. It adds only `forum_*` tables and reuses the existing `auth.users`, `public.user_roles`, and `public.is_admin()` objects.
+
+## Local Node.js development
 
 ```sh
 npm run dev
+```
+
+Open `http://localhost:3000`. Useful checks:
+
+```sh
+npm run check
 npm run build
 npm run validate
 ```
 
-Use this starter for a static microsite, click counter, or simple internal UI whose state is browser-scoped. It has no dependencies and needs no install.
+## Docker deployment
 
-Edit `worker/index.js`, then publish through the Sites hosting workflow with this starter's build and validation in `commands`.
+Build and start the production container:
 
-The build copies only `worker/index.js` and `.openai/hosting.json`. Do not add standalone asset files. Embed any essential raster bytes in `worker/index.js` and serve or reference them as a data URL.
-
-Pass these argument arrays as `commands`:
-
-```json
-[
-  ["bash", "scripts/build.sh"],
-  ["node", "scripts/validate-artifact.mjs"]
-]
+```sh
+docker compose up -d --build
 ```
 
-The deterministic build produces:
+Or use the deployment helper:
 
-```text
-dist/
-├── .openai/
-│   └── hosting.json
-└── server/
-    └── index.js
+```sh
+sh scripts/deploy.sh up
 ```
 
-`dist/server/index.js` is an ES module with a default export containing `fetch(request, env, ctx)`. Edit `worker/index.js`, not the generated file under `dist/`.
+On Windows PowerShell:
+
+```powershell
+.\scripts\deploy.ps1 up
+```
+
+Operational commands:
+
+```sh
+sh scripts/deploy.sh status
+sh scripts/deploy.sh logs
+sh scripts/deploy.sh restart
+sh scripts/deploy.sh down
+```
+
+The health endpoint is `GET /api/health`. Docker maps `${FORUM_PORT:-3000}` on the host to port `3000` in the container.
+
+## Updating production
+
+1. Pull the new source revision.
+2. Keep production values in the ignored `.env` file or in the host's secret manager.
+3. Run `sh scripts/deploy.sh up` or `.\scripts\deploy.ps1 up`.
+4. Confirm `docker compose ps` reports the service as healthy.
+
+The deploy helper rebuilds the image, recreates the service, removes orphaned containers, and preserves the configured restart policy.
+
+## OpenAI Sites
+
+`npm run build` creates the Worker artifact in `dist/`. `npm run validate` verifies the Sites entry point. Generated `dist/` and `outputs/` directories are intentionally excluded from Git.

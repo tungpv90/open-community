@@ -25,4 +25,13 @@ const server = createServer(async (incoming, outgoing) => {
   }
 });
 
-server.listen(port, () => console.log(`Community forum running at http://localhost:${port}`));
+server.listen(port, '0.0.0.0', () => console.log(`Flarum Community running at http://0.0.0.0:${port}`));
+
+function shutdown(signal) {
+  console.log(`${signal} received; shutting down gracefully`);
+  server.close((error) => process.exit(error ? 1 : 0));
+  setTimeout(() => process.exit(1), 10_000).unref();
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

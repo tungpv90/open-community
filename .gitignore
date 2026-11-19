@@ -1,3 +1,29 @@
+# Dependencies and local tooling
+node_modules/
+.npm/
+.pnpm-store/
+
+# Runtime configuration
+.env
+.env.*
+!.env.example
+
+# Generated output
 dist/
-site.tar.gz
 outputs/
+coverage/
+.cache/
+*.tar.gz
+
+# Logs and editor files
+*.log
+*.pid
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local Docker overrides
+compose.override.yaml
+docker-compose.override.yml

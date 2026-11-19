@@ -256,14 +256,14 @@ do $$ declare t text; begin
 end $$;
 
 insert into public.forum_tags(name,slug,color,position) values
-('Hỗ trợ','ho-tro','#e7672e',1),('Tiện ích','tien-ich','#58a400',2),('Phát triển','phat-trien','#536dfe',3),('Meta','meta','#7b5fb5',4),('Tài nguyên','tai-nguyen','#3b9b9b',5),('Chuyện trò','chuyen-tro','#888',6)
+('Support','ho-tro','#e7672e',1),('Extensions','tien-ich','#58a400',2),('Development','phat-trien','#536dfe',3),('Meta','meta','#7b5fb5',4),('Resources','tai-nguyen','#3b9b9b',5),('Off-topic','chuyen-tro','#888',6)
 on conflict(slug) do nothing;
 
 insert into public.forum_groups(name,color,is_system) values
-('Quản trị viên','#b72a2a',true),('Điều hành viên','#e7672e',true),('Thành viên','#667d99',true)
+('Administrators','#b72a2a',true),('Moderators','#e7672e',true),('Member','#667d99',true)
 on conflict(name) do nothing;
 
-insert into public.forum_settings(key,value) values('general','{"title":"Cộng Đồng Việt","description":"Nơi chia sẻ kiến thức, nhận trợ giúp và kết nối.","primary":"#e7672e","registration":"open"}'::jsonb)
+insert into public.forum_settings(key,value) values('general','{"title":"Flarum Community","description":"A place to share knowledge, get help, and connect.","primary":"#e7672e","registration":"open"}'::jsonb)
 on conflict(key) do nothing;
 
 notify pgrst,'reload schema';
