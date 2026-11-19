@@ -1,14 +1,24 @@
 # Cộng Đồng Việt
 
-Diễn đàn kiểu Flarum, chạy trên OpenAI Sites và tích hợp Supabase Auth/PostgREST.
+Diễn đàn Node.js kiểu Flarum, chạy trên OpenAI Sites và tích hợp Supabase Auth/PostgREST.
 
 ## Kết nối Supabase
 
-1. Chạy `supabase-schema.sql` trong Supabase SQL Editor.
+1. Chạy `supabase-schema.sql` trong đúng Supabase project của `E:\paddle-nextjs-starter-kit`.
 2. Cấu hình hai biến môi trường Site: `SUPABASE_URL` và `SUPABASE_ANON_KEY`.
 3. Triển khai lại phiên bản đã lưu để áp dụng environment revision.
 
-Khi chưa có hai biến này, website chạy ở chế độ demo bằng localStorage.
+Forum dùng chung `auth.users` và `public.user_roles` của starter kit. Các bảng `forum_*` chỉ bổ sung hồ sơ, bài viết, tag, quyền và dữ liệu quản trị; không tạo hệ tài khoản khác.
+
+Khi chưa có hai biến môi trường, website chạy ở chế độ demo bằng localStorage.
+
+## Node.js
+
+```sh
+npm run dev
+npm run build
+npm run validate
+```
 
 Use this starter for a static microsite, click counter, or simple internal UI whose state is browser-scoped. It has no dependencies and needs no install.
 
