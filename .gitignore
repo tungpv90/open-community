@@ -27,3 +27,8 @@ Thumbs.db
 # Local Docker overrides
 compose.override.yaml
 docker-compose.override.yml
+
+# Local browser QA artifacts and the retired nested checkout
+.chrome-*/
+*-preview.png
+flarum-community/
