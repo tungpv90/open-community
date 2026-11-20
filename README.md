@@ -10,6 +10,27 @@ A lightweight Flarum-inspired community forum with a Node.js runtime, Supabase a
 - Demo mode backed by browser storage when Supabase is not configured.
 - Production-ready Docker image running as a non-root user with a read-only filesystem and health checks.
 
+## Project structure
+
+The repository keeps editable source separate from generated deployment output:
+
+```text
+src/
+  index.html       Page structure and accessible content
+  styles/
+    base.css       Shared component foundations
+    community.css  Design tokens and responsive community theme
+  app.js           Browser interactions and forum state
+worker/
+  api.js           API routes and Supabase integration
+scripts/
+  build.mjs        Generates the deployable Worker artifact
+  dev.mjs          Builds once, then starts the local server
+dist/              Generated output; never edit directly
+```
+
+UI work belongs in `src/`, backend work belongs in `worker/api.js`, and `npm run build` composes both into a single deployment artifact. This keeps Docker and OpenAI Sites on the same tested build path.
+
 ## Requirements
 
 - Node.js 20 or newer for local development.
