@@ -121,7 +121,7 @@ Add `${PUBLIC_SITE_URL}` and `${PUBLIC_SITE_URL}/reset-password` to Supabase **A
 
 Everything runs from **Actions → Deploy → Run workflow** (`.github/workflows/deploy.yml`); no manual server or database steps are needed. Each run:
 
-1. Applies database changes with `scripts/migrate.sh`: a fresh database gets `supabase-schema.sql`, then every file in `supabase/migrations/` runs once and is recorded in `public.schema_migrations`.
+1. Applies database changes with `scripts/migrate.sh` (through the Supabase Management API when `SUPABASE_ACCESS_TOKEN` is set, otherwise over `SUPABASE_DB_URL`): a fresh database gets `supabase-schema.sql`, then every file in `supabase/migrations/` runs once and is recorded in `public.schema_migrations`.
 2. Sets the Supabase Auth Site URL and adds the site to the redirect allow list.
 3. Builds the Docker image on the GitHub runner (for the server's CPU architecture), so the server never runs `next build`.
 4. Uploads the image and the selected commit over SSH, installs Docker on the server if it is missing, writes the server `.env`, restarts the container, and waits for it to report healthy.
@@ -137,7 +137,7 @@ Add these to the repository's `production` environment (Settings → Environment
 | Secret   | `DEPLOY_KNOWN_HOSTS`                         | Recommended: `ssh-keyscan -t ed25519 <host>` output, checked by hand                                                                                                                   |
 | Secret   | `SUPABASE_URL`, `SUPABASE_ANON_KEY`          | Public Supabase client credentials                                                                                                                                                     |
 | Secret   | `SUPABASE_DB_URL`                            | Database connection string (direct or pooler) or just the password; the workflow switches to the IPv4 session pooler automatically (override with the `SUPABASE_POOLER_HOST` variable) |
-| Secret   | `SUPABASE_ACCESS_TOKEN`                      | Optional personal access token to set the Auth URLs; otherwise set them in the dashboard                                                                                               |
+| Secret   | `SUPABASE_ACCESS_TOKEN`                      | Recommended personal access token: applies migrations through the Management API (then `SUPABASE_DB_URL` is not needed) and sets the Auth URLs                                         |
 | Variable | `PUBLIC_SITE_URL`                            | Optional, default `https://community.apaxsoft.com`                                                                                                                                     |
 | Variable | `FORUM_PORT`, `DEPLOY_PATH`                  | Optional, default `9081` and `/opt/open-community`                                                                                                                                     |
 | Variable | `AUTH_OAUTH_PROVIDERS`, `TURNSTILE_SITE_KEY` | Optional, same meaning as in `.env`                                                                                                                                                    |
