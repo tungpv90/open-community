@@ -11,6 +11,24 @@ set -euo pipefail
 : "${DATABASE_URL:?Set DATABASE_URL to the Supabase Postgres connection string}"
 cd "$(dirname "$0")/.."
 
+# Tolerate common copy-paste noise: surrounding whitespace or quotes, or a KEY= prefix.
+DATABASE_URL=$(printf '%s' "$DATABASE_URL" | tr -d '\r\n' |
+  sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^[A-Z_]+=//; s/^["'\'']//; s/["'\'']$//')
+case "$DATABASE_URL" in
+  postgres://* | postgresql://*) ;;
+  *)
+    echo "DATABASE_URL must start with postgresql:// (got ${#DATABASE_URL} characters" \
+      "starting with '$(printf '%s' "$DATABASE_URL" | cut -c1-4)…')." >&2
+    exit 1
+    ;;
+esac
+case "$DATABASE_URL" in
+  *'[YOUR-PASSWORD]'*)
+    echo "DATABASE_URL still contains the [YOUR-PASSWORD] placeholder." >&2
+    exit 1
+    ;;
+esac
+
 psql_run() {
   psql "$DATABASE_URL" --no-psqlrc --quiet --set ON_ERROR_STOP=1 "$@"
 }
