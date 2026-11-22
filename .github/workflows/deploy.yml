@@ -94,11 +94,16 @@ jobs:
             done
             for host in $candidates; do
               try="postgresql://postgres.$ref:$password@$host:5432/postgres?sslmode=require&connect_timeout=8"
-              if psql "$try" --no-psqlrc -tAc 'select 1' >/dev/null 2>&1; then
+              if output=$(psql "$try" --no-psqlrc -tAc 'select 1' 2>&1); then
                 url="$try"
                 echo "Using the session pooler at $host"
                 break
               fi
+              # "Tenant not found" only means the project lives in another region.
+              case "$output" in
+                *'not found'* | *'could not translate host'*) ;;
+                *) echo "$host: $output" | sed "s#$password#***#g" ;;
+              esac
             done
             if [ -z "$url" ]; then
               echo "::error::Could not connect to project $ref through any Supabase session pooler. Check SUPABASE_URL and the database password in SUPABASE_DB_URL."
