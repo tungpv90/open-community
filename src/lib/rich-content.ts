@@ -73,7 +73,7 @@ export function formatBytes(value: number) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function parseAttachmentLine(line: string): RichAttachment | null {
+function parseAttachmentLine(line: string): RichAttachment | null {
   const match = String(line || '').match(
     /^:::attachment\|([^|]*)\|([^|]*)\|(\d+)\|(data:application\/octet-stream;base64,[a-z0-9+/=]*):::$/i,
   );

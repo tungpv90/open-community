@@ -514,12 +514,6 @@
   padding: 17px 24px;
 }
 
-.save-success {
-  color: var(--success);
-  font-size: 0.82rem;
-  font-weight: 700;
-}
-
 .admin-loading,
 .admin-error {
   padding: 80px 24px;
@@ -702,14 +696,6 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-}
-
-.color-swatch {
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  vertical-align: -2px;
 }
 
 @media (max-width: 600px) {

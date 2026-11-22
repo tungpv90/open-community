@@ -256,9 +256,6 @@
   border-top: 1px solid var(--border);
   background: var(--background);
 }
-.editor-attachments.previewing {
-  display: none;
-}
 .attachment-card {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr) auto;

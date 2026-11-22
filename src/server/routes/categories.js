@@ -68,4 +68,4 @@ async function handleCategoryRoute(request, url, supabase) {
   return null;
 }
 
-export { categorySlug, findCategory, handleCategoryRoute, listCategories, parseCategoryInput };
+export { findCategory, handleCategoryRoute, listCategories, parseCategoryInput };
