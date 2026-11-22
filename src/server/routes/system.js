@@ -1,5 +1,6 @@
 import { json } from '../http/responses.js';
 import { getOAuthProviders, getTurnstileSiteKey } from '../config/authentication.js';
+import { cachedFor } from '../services/cache.js';
 import { createSupabaseClient, isSupabaseConfigured } from '../services/supabase.js';
 
 /** Public community configuration: saved settings, sign-in providers, and captcha key. */
@@ -8,10 +9,12 @@ async function loadCommunityConfig(environment) {
     return { configured: false, settings: {}, auth_providers: [] };
   }
   const supabase = createSupabaseClient(environment);
-  const settings = await supabase
-    .request('/rest/v1/forum_settings?key=eq.general&select=value', { method: 'GET' })
-    .then(({ body }) => body[0]?.value || {})
-    .catch(() => ({}));
+  // Every page render reads these settings, so they come from the shared cache.
+  const settings = await cachedFor(supabase, 'settings', () =>
+    supabase
+      .request('/rest/v1/forum_settings?key=eq.general&select=value', { method: 'GET' })
+      .then(({ body }) => body[0]?.value || {}),
+  ).catch(() => ({}));
   return {
     configured: true,
     settings,

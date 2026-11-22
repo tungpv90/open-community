@@ -1,4 +1,5 @@
 import { json } from '../http/responses.js';
+import { cachedFor } from '../services/cache.js';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const colorPattern = /^#[0-9a-f]{3,8}$/i;
@@ -34,7 +35,13 @@ function parseCategoryInput(input) {
 }
 
 /** Lists categories in display order with the number of discussions visible to the caller. */
-async function listCategories(supabase, token = '') {
+function listCategories(supabase, token = '') {
+  // Anonymous results are the same for every visitor, so they are shared.
+  if (!token) return cachedFor(supabase, 'categories', () => fetchCategories(supabase));
+  return fetchCategories(supabase, token);
+}
+
+async function fetchCategories(supabase, token = '') {
   const select = encodeURIComponent(
     'id,name,slug,description,color,position,discussions:forum_discussions(count)',
   );

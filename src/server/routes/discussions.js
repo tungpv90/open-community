@@ -1,20 +1,48 @@
 import { json } from '../http/responses.js';
+import { cachedFor } from '../services/cache.js';
 import { findCategory, listCategories } from './categories.js';
 
-async function listDiscussions(request, supabase) {
-  const select = encodeURIComponent(
-    '*,profiles:forum_profiles!forum_discussions_user_id_fkey(id,username,display_name,avatar_url,avatar_color),category:forum_categories(id,name,slug,color)',
-  );
-  const [{ body }, categories] = await Promise.all([
-    supabase.request(
-      `/rest/v1/forum_discussions?select=${select}&order=is_pinned.desc,updated_at.desc&limit=50`,
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const authorSelect = 'id,username,display_name,avatar_url,avatar_color';
+const discussionSelect = encodeURIComponent(
+  `*,profiles:forum_profiles!forum_discussions_user_id_fkey(${authorSelect}),category:forum_categories(id,name,slug,color)`,
+);
+
+/**
+ * Leading text of a discussion for list views. Stored content can embed images and files as
+ * base64 data, so lists carry this short preview instead of the full body.
+ */
+function contentPreview(content) {
+  const text = String(content || '')
+    .replace(/^:::attachment\|.*:::$/gm, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .trim();
+  return text.length > 400 ? text.slice(0, 400) : text;
+}
+
+function listSummary({ content, ...discussion }) {
+  return { ...discussion, preview: contentPreview(content) };
+}
+
+/** The 50 most recently active discussions, as every visitor sees them. */
+function loadDiscussionList(supabase) {
+  return cachedFor(supabase, 'discussions', async () => {
+    const { body } = await supabase.request(
+      `/rest/v1/forum_discussions?select=${discussionSelect}&order=is_pinned.desc,updated_at.desc&limit=50`,
       { method: 'GET' },
-    ),
+    );
+    return (body || []).map(listSummary);
+  });
+}
+
+async function listDiscussions(request, supabase) {
+  const [discussions, categories] = await Promise.all([
+    loadDiscussionList(supabase),
     listCategories(supabase),
   ]);
 
   const authorization = request.headers.get('authorization') || '';
-  if (!authorization.startsWith('Bearer ')) return json({ discussions: body, categories });
+  if (!authorization.startsWith('Bearer ')) return json({ discussions, categories });
 
   const { user, token } = await supabase.getUser(request);
   const { body: follows } = await supabase.request(
@@ -25,10 +53,79 @@ async function listDiscussions(request, supabase) {
   const followedIds = new Set(follows.map((follow) => String(follow.discussion_id)));
   return json({
     categories,
-    discussions: body.map((discussion) => ({
+    discussions: discussions.map((discussion) => ({
       ...discussion,
       viewer_following: followedIds.has(String(discussion.id)),
     })),
+  });
+}
+
+/** Threads with large embedded files are loaded fresh each time instead of held in memory. */
+const maxCachedThreadSize = 512 * 1024;
+
+function threadSize({ discussion, posts }) {
+  return posts.reduce(
+    (total, post) => total + String(post.content || '').length,
+    String(discussion.content || '').length,
+  );
+}
+
+/** One discussion with its posts as every visitor sees them, or null when it does not exist. */
+function loadDiscussionThread(supabase, discussionId) {
+  const id = String(discussionId || '');
+  if (!uuidPattern.test(id)) return Promise.resolve(null);
+  return cachedFor(
+    supabase,
+    `discussion:${id}`,
+    async () => {
+      const postSelect = encodeURIComponent(
+        `*,profiles:forum_profiles!forum_posts_user_id_fkey(${authorSelect})`,
+      );
+      const [{ body: discussions }, { body: posts }] = await Promise.all([
+        supabase.request(`/rest/v1/forum_discussions?id=eq.${id}&select=${discussionSelect}`, {
+          method: 'GET',
+        }),
+        supabase.request(
+          `/rest/v1/forum_posts?discussion_id=eq.${id}&select=${postSelect}&order=number.asc`,
+          { method: 'GET' },
+        ),
+      ]);
+      if (!discussions?.[0]) return null;
+      return { discussion: discussions[0], posts: posts || [] };
+    },
+    { shouldStore: (thread) => !thread || threadSize(thread) <= maxCachedThreadSize },
+  );
+}
+
+async function getDiscussion(request, discussionId, supabase) {
+  const thread = await loadDiscussionThread(supabase, discussionId);
+  if (!thread) return json({ error: 'Discussion not found' }, 404);
+
+  const authorization = request.headers.get('authorization') || '';
+  if (!authorization.startsWith('Bearer ')) return json(thread);
+
+  const { user, token } = await supabase.getUser(request);
+  const userId = encodeURIComponent(user.id);
+  const id = encodeURIComponent(thread.discussion.id);
+  const postIds = thread.posts.map((post) => post.id).join(',');
+  const [{ body: follows }, { body: likes }] = await Promise.all([
+    supabase.request(
+      `/rest/v1/forum_follows?user_id=eq.${userId}&discussion_id=eq.${id}&select=discussion_id`,
+      { method: 'GET' },
+      token,
+    ),
+    postIds
+      ? supabase.request(
+          `/rest/v1/forum_likes?user_id=eq.${userId}&post_id=in.(${postIds})&select=post_id`,
+          { method: 'GET' },
+          token,
+        )
+      : Promise.resolve({ body: [] }),
+  ]);
+  const likedIds = new Set((likes || []).map((like) => String(like.post_id)));
+  return json({
+    discussion: { ...thread.discussion, viewer_following: Boolean(follows?.length) },
+    posts: thread.posts.map((post) => ({ ...post, viewer_liked: likedIds.has(String(post.id)) })),
   });
 }
 
@@ -68,32 +165,6 @@ async function createDiscussion(request, supabase) {
   );
 
   return json({ discussion: body[0] }, 201);
-}
-
-async function getDiscussionPosts(request, discussionId, supabase) {
-  const id = encodeURIComponent(discussionId);
-  const select = encodeURIComponent(
-    '*,profiles:forum_profiles!forum_posts_user_id_fkey(id,username,display_name,avatar_url,avatar_color)',
-  );
-  const { body: posts } = await supabase.request(
-    `/rest/v1/forum_posts?discussion_id=eq.${id}&select=${select}&order=number.asc`,
-    { method: 'GET' },
-  );
-
-  const authorization = request.headers.get('authorization') || '';
-  if (!authorization.startsWith('Bearer ') || !posts.length) return json({ posts });
-
-  const { user, token } = await supabase.getUser(request);
-  const postIds = posts.map((post) => post.id).join(',');
-  const { body: likes } = await supabase.request(
-    `/rest/v1/forum_likes?user_id=eq.${encodeURIComponent(user.id)}&post_id=in.(${postIds})&select=post_id`,
-    { method: 'GET' },
-    token,
-  );
-  const likedIds = new Set(likes.map((like) => String(like.post_id)));
-  return json({
-    posts: posts.map((post) => ({ ...post, viewer_liked: likedIds.has(String(post.id)) })),
-  });
 }
 
 async function createReply(request, discussionId, supabase) {
@@ -217,10 +288,10 @@ async function handleDiscussionRoute(request, url, supabase) {
 
   const detailMatch = url.pathname.match(/^\/api\/discussions\/([^/]+)$/);
   if (detailMatch && request.method === 'GET') {
-    return getDiscussionPosts(request, detailMatch[1], supabase);
+    return getDiscussion(request, detailMatch[1], supabase);
   }
 
   return null;
 }
 
-export { handleDiscussionRoute };
+export { handleDiscussionRoute, loadDiscussionList, loadDiscussionThread };

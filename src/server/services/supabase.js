@@ -52,7 +52,10 @@ function createSupabaseClient(environment) {
     return auth;
   }
 
-  return { getAdmin, getUser, request };
+  // Identifies the project so shared caches never mix data from different databases.
+  const cacheKey = environment.SUPABASE_URL.replace(/\/$/, '');
+
+  return { cacheKey, getAdmin, getUser, request };
 }
 
 export { createSupabaseClient, isSupabaseConfigured };
