@@ -102,7 +102,7 @@ jobs:
               # "Tenant not found" only means the project lives in another region.
               case "$output" in
                 *'not found'* | *'could not translate host'*) ;;
-                *) echo "$host: $output" | sed "s#$password#***#g" ;;
+                *) echo "$host: ${output//"$password"/***}" ;;
               esac
             done
             if [ -z "$url" ]; then
