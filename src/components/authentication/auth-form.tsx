@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 
 import { TurnstileWidget } from '@/components/authentication/turnstile-widget';
@@ -25,7 +25,7 @@ const providerLabels: Record<string, string> = {
 };
 
 /** Returns a same-site path from `?next=`, never an absolute or protocol-relative URL. */
-export function safeNextPath(search: string) {
+function safeNextPath(search: string) {
   const next = new URLSearchParams(search).get('next') || '';
   return /^\/(?!\/)/.test(next) ? next : '/';
 }
@@ -41,11 +41,9 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [nextPath, setNextPath] = useState('/');
-  const [apaxLogin, setApaxLogin] = useState(false);
   const [website, setWebsite] = useState('');
   const [captchaToken, setCaptchaToken] = useState('');
   const [captchaReset, setCaptchaReset] = useState(0);
-  const emailInput = useRef<HTMLInputElement>(null);
 
   const registrationClosed = mode === 'signup' && settings.registration === 'closed';
   const loginHref = nextPath === '/' ? '/login' : `/login?next=${encodeURIComponent(nextPath)}`;
@@ -113,14 +111,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
     }
   }
 
-  /** APAX ID accounts live in the same Supabase project, so they sign in with email and password. */
-  function chooseApaxId() {
-    setError('');
-    setApaxLogin(true);
-    emailInput.current?.focus();
-  }
-
-  const showProviders = mode === 'login';
+  const showProviders = mode === 'login' && authProviders.length > 0;
 
   return (
     <main className="auth-page">
@@ -155,14 +146,6 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         {showProviders ? (
           <>
             <div className="oauth-grid">
-              <button
-                type="button"
-                className="apax-id-button"
-                onClick={chooseApaxId}
-                aria-pressed={apaxLogin}
-              >
-                <b>A</b> Continue with APAX ID
-              </button>
               {authProviders.map((provider) => (
                 <button type="button" onClick={() => oauth(provider)} key={provider}>
                   <b>{provider[0].toUpperCase()}</b> Continue with{' '}
@@ -174,12 +157,6 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
               <span>or use email</span>
             </div>
           </>
-        ) : null}
-
-        {apaxLogin ? (
-          <p className="auth-hint" role="status">
-            Sign in with the email address and password of your APAX ID account.
-          </p>
         ) : null}
 
         <form onSubmit={submit}>
@@ -213,7 +190,6 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
           <label>
             <span>Email address</span>
             <input
-              ref={emailInput}
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               type="email"

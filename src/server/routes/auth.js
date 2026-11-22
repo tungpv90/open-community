@@ -62,7 +62,6 @@ async function handleAuthRoute(request, url, supabase, environment) {
         email: credentials.email,
         password: credentials.password,
         data: {
-          account_source: 'community',
           display_name: String(input.name || credentials.email.split('@')[0])
             .trim()
             .slice(0, 80),

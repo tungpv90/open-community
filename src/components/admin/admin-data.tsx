@@ -17,7 +17,6 @@ export type AdminUser = {
   role?: string;
   joined_at?: string;
   last_seen_at?: string | null;
-  account_source?: string;
 };
 
 export type AdminTag = {

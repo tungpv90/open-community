@@ -26,7 +26,7 @@ test('OAuth endpoint returns a same-site Supabase authorization URL', async () =
   );
 });
 
-test('LinkedIn uses the OIDC provider shared with APAX ID', async () => {
+test('LinkedIn maps to the Supabase OIDC provider', async () => {
   const message = new Request('https://community.example/api/auth/oauth/linkedin');
   const response = await handleAuthRoute(
     message,
@@ -107,7 +107,6 @@ test('Community signup labels the new Supabase user source', async () => {
   const signupBody = JSON.parse(signupCall[1].body);
 
   assert.equal(response.status, 200);
-  assert.equal(signupBody.data.account_source, 'community');
   assert.equal(signupBody.data.display_name, 'Community Member');
 });
 

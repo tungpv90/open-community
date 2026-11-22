@@ -93,26 +93,6 @@
   color: var(--brand);
 }
 
-.oauth-grid .apax-id-button,
-.oauth-grid .apax-id-button[aria-pressed='true'] {
-  border-color: color-mix(in srgb, var(--brand) 45%, var(--border));
-}
-
-.oauth-grid .apax-id-button b {
-  background: var(--brand);
-  color: #fff;
-}
-
-.auth-hint {
-  margin: 0 0 14px;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--brand) 30%, var(--border));
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--brand) 8%, var(--surface));
-  color: var(--heading);
-  font-size: 0.86rem;
-}
-
 /* Spam trap: kept in the DOM for bots but out of sight and out of the tab order. */
 .auth-honeypot {
   position: absolute;

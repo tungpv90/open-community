@@ -1,8 +1,32 @@
--- Forum migration for the SAME Supabase project used by paddle-nextjs-starter-kit.
--- Accounts remain in auth.users; administrators remain in public.user_roles.
--- Run once in that project's Supabase SQL Editor or migration pipeline.
+-- Complete database setup for a dedicated Supabase project.
+-- Accounts live in auth.users; community administrators are listed in public.user_roles.
+-- Run once in the project's Supabase SQL Editor or migration pipeline.
 
 create extension if not exists pgcrypto;
+
+create table if not exists public.user_roles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  role text not null default 'user' check (role in ('admin','user')),
+  updated_at timestamptz not null default now()
+);
+
+-- Security definer so RLS policies can call it without recursing into user_roles policies.
+create or replace function public.is_admin(target_user_id uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists(
+    select 1 from public.user_roles r where r.user_id = target_user_id and r.role = 'admin'
+  );
+$$;
+revoke all on function public.is_admin(uuid) from public;
+grant execute on function public.is_admin(uuid) to anon, authenticated;
+
+alter table public.user_roles enable row level security;
+drop policy if exists user_roles_read on public.user_roles;
+create policy user_roles_read on public.user_roles for select
+using(auth.uid() = user_id or public.is_admin(auth.uid()));
+drop policy if exists user_roles_admin on public.user_roles;
+create policy user_roles_admin on public.user_roles for all
+using(public.is_admin(auth.uid())) with check(public.is_admin(auth.uid()));
 
 create table if not exists public.forum_profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -248,7 +272,7 @@ revoke all on function public.forum_increment_discussion_view(uuid) from public;
 grant execute on function public.forum_increment_discussion_view(uuid) to anon,authenticated;
 
 drop function if exists public.forum_admin_users();
-create function public.forum_admin_users() returns table(id uuid,email text,email_confirmed_at timestamptz,username text,display_name text,status text,role text,joined_at timestamptz,last_seen_at timestamptz,account_source text)
+create function public.forum_admin_users() returns table(id uuid,email text,email_confirmed_at timestamptz,username text,display_name text,status text,role text,joined_at timestamptz,last_seen_at timestamptz)
 language sql security definer set search_path='' as $$
   select
     u.id,
@@ -259,8 +283,7 @@ language sql security definer set search_path='' as $$
     coalesce(p.status,'active'),
     case when r.role='admin' then 'admin' else coalesce(p.forum_role,'member') end,
     coalesce(p.joined_at,u.created_at),
-    coalesce(p.last_seen_at,u.last_sign_in_at),
-    coalesce(u.raw_user_meta_data->>'account_source','apax')
+    coalesce(p.last_seen_at,u.last_sign_in_at)
   from auth.users u
   left join public.forum_profiles p on p.id=u.id
   left join public.user_roles r on r.user_id=u.id
@@ -433,5 +456,17 @@ for each row execute procedure public.forum_enforce_new_account_limits();
 drop trigger if exists forum_posts_new_account_limits on public.forum_posts;
 create trigger forum_posts_new_account_limits before insert on public.forum_posts
 for each row execute procedure public.forum_enforce_new_account_limits();
+
+-- New Supabase projects do not grant table access to the API roles automatically.
+-- Row level security above still decides which rows each role can see or change.
+grant usage on schema public to anon, authenticated;
+grant select on all tables in schema public to anon;
+grant select, insert, update, delete on all tables in schema public to authenticated;
+grant usage, select on all sequences in schema public to anon, authenticated;
+
+-- Promote the first administrator after they sign up (replace the email):
+-- insert into public.user_roles(user_id,role)
+-- select id,'admin' from auth.users where email='admin@example.com'
+-- on conflict(user_id) do update set role='admin',updated_at=now();
 
 notify pgrst,'reload schema';
