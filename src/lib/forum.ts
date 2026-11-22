@@ -43,8 +43,8 @@ export type ForumDiscussion = {
   excerpt: string;
   content: string;
   author: ForumAuthor;
-  tag: ForumTag;
-  /** The discussion's category; absent only for sample data or legacy rows. */
+  tag: ForumTag | null;
+  /** The discussion's category; absent only for legacy rows. */
   category: ForumCategory | null;
   createdAt: string;
   /** Creation time in epoch milliseconds, when known. */
@@ -55,95 +55,6 @@ export type ForumDiscussion = {
   pinned: boolean;
   following?: boolean;
 };
-
-export const defaultTags: ForumTag[] = [
-  { name: 'Announcements', slug: 'announcements', color: '#6c5ce7' },
-  { name: 'Development', slug: 'development', color: '#20b486' },
-  { name: 'Lifestyle', slug: 'lifestyle', color: '#f59e55' },
-  { name: 'Sharing', slug: 'sharing', color: '#ef5b6a' },
-  { name: 'Q&A', slug: 'q-and-a', color: '#4a90e2' },
-];
-
-export const demoDiscussions: ForumDiscussion[] = [
-  {
-    id: 'd1',
-    title: 'Welcome to Flarum Community!',
-    excerpt: 'Introduce yourself and share what you hope to find in the community.',
-    content:
-      'Hello everyone!\n\nThis is a space to exchange knowledge, experience, and interesting ideas. Please keep conversations friendly, useful, and respectful.',
-    author: { name: 'An Nguyễn', username: 'annguyen', initials: 'AN', color: '#6c5ce7' },
-    tag: defaultTags[0],
-    category: null,
-    createdAt: '2 hours ago',
-    updatedAt: Date.now() - 7_200_000,
-    replies: 18,
-    views: 342,
-    pinned: true,
-    following: true,
-  },
-  {
-    id: 'd2',
-    title: 'A web development roadmap for beginners',
-    excerpt:
-      'A practical collection of HTML, CSS, and JavaScript resources for every learning stage.',
-    content:
-      'Start with HTML and CSS fundamentals, move to JavaScript and the DOM, then build three complete projects. Shipping real work is the fastest teacher.',
-    author: { name: 'Minh Hoàng', username: 'minhhoang', initials: 'MH', color: '#20b486' },
-    tag: defaultTags[1],
-    category: null,
-    createdAt: '4 hours ago',
-    updatedAt: Date.now() - 14_400_000,
-    replies: 26,
-    views: 587,
-    pinned: false,
-    following: true,
-  },
-  {
-    id: 'd3',
-    title: 'Showcase: Your minimalist workspace',
-    excerpt: 'Share your workspace and the tools that help you focus every day.',
-    content:
-      'A workspace does not need many things, but it should make you want to sit down and begin. What keyboard, monitor, and layout do you use?',
-    author: { name: 'Khánh Linh', username: 'khanhlinh', initials: 'KL', color: '#f59e55' },
-    tag: defaultTags[2],
-    category: null,
-    createdAt: 'Yesterday',
-    updatedAt: Date.now() - 86_400_000,
-    replies: 33,
-    views: 761,
-    pinned: false,
-  },
-  {
-    id: 'd4',
-    title: 'How do you manage time and avoid distractions?',
-    excerpt: 'Share the deep-work methods, Pomodoro routines, and small habits that actually work.',
-    content:
-      'Notifications and small tasks often pull me away. Recently I started dividing my day into 90-minute blocks and checking messages twice a day.',
-    author: { name: 'Quang Trần', username: 'quangtran', initials: 'QT', color: '#ef5b6a' },
-    tag: defaultTags[3],
-    category: null,
-    createdAt: '2 days ago',
-    updatedAt: Date.now() - 172_800_000,
-    replies: 12,
-    views: 290,
-    pinned: false,
-  },
-  {
-    id: 'd5',
-    title: 'Q&A: Which framework should I choose?',
-    excerpt: 'React, Vue, Svelte, or plain JavaScript? Compare them against real project needs.',
-    content:
-      'I am building a personal expense tracker. It should be lightweight, easy to deploy, and maintainable. What would you choose?',
-    author: { name: 'Bảo Phạm', username: 'baopham', initials: 'BP', color: '#4a90e2' },
-    tag: defaultTags[4],
-    category: null,
-    createdAt: '3 days ago',
-    updatedAt: Date.now() - 259_200_000,
-    replies: 0,
-    views: 146,
-    pinned: false,
-  },
-];
 
 export function initials(value: string) {
   return value
@@ -190,7 +101,7 @@ export function normalizeDiscussion(input: Record<string, any>): ForumDiscussion
       initials: initials(name),
       color: profile.avatar_color || '#6c5ce7',
     },
-    tag: linkedTag || defaultTags[1],
+    tag: linkedTag || null,
     category: normalizeCategory(input.category),
     createdAt: input.created_at
       ? new Date(input.created_at).toLocaleDateString('en-US')

@@ -6,9 +6,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { DiscussionCard } from '@/components/community/discussion-card';
 import { useCommunity } from '@/components/session/community-provider';
 import { defaultWelcome } from '@/lib/community-settings';
-import { defaultTags, demoDiscussions, normalizeCategory, normalizeDiscussion } from '@/lib/forum';
+import { normalizeCategory, normalizeDiscussion } from '@/lib/forum';
 import type { ForumCategory, ForumDiscussion, ForumTag } from '@/lib/forum';
-import { api } from '@/utils/api/client';
+import { api, errorMessage } from '@/utils/api/client';
 
 type Filter = 'all' | 'following' | 'unanswered' | 'popular';
 type Sort = 'latest' | 'newest' | 'top';
@@ -23,9 +23,9 @@ function writeCategoryParam(slug: string) {
 
 export function ForumHome() {
   const { settings, user } = useCommunity();
-  const [demo, setDemo] = useState(false);
-  const [discussions, setDiscussions] = useState<ForumDiscussion[]>(demoDiscussions);
-  const [tags, setTags] = useState<ForumTag[]>(defaultTags);
+  const [loadError, setLoadError] = useState('');
+  const [discussions, setDiscussions] = useState<ForumDiscussion[]>([]);
+  const [tags, setTags] = useState<ForumTag[]>([]);
   const [categories, setCategories] = useState<ForumCategory[]>([]);
   const [category, setCategory] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
@@ -49,10 +49,10 @@ export function ForumHome() {
             .map(normalizeCategory)
             .filter((item): item is ForumCategory => Boolean(item)),
         );
-        if (result.tags?.length) setTags(result.tags);
-        setDemo(false);
+        setTags(result.tags || []);
+        setLoadError('');
       })
-      .catch(() => setDemo(true))
+      .catch((error) => setLoadError(errorMessage(error, 'Could not load discussions')))
       .finally(() => setLoading(false));
   }, [user]);
 
@@ -61,7 +61,7 @@ export function ForumHome() {
   const visible = useMemo(() => {
     let result = discussions.filter((discussion) => {
       if (activeCategory && discussion.category?.slug !== activeCategory.slug) return false;
-      if (tag && discussion.tag.slug !== tag) return false;
+      if (tag && discussion.tag?.slug !== tag) return false;
       if (filter === 'following' && !discussion.following) return false;
       if (filter === 'unanswered' && discussion.replies > 0) return false;
       if (filter === 'popular' && discussion.views < 250) return false;
@@ -152,24 +152,28 @@ export function ForumHome() {
           </>
         ) : null}
 
-        <h2 className="sidebar-title">Browse by tag</h2>
-        <nav className="filter-nav tag-nav" aria-label="Discussion tags">
-          {tags.map((item) => (
-            <button
-              className={tag === item.slug ? 'active' : ''}
-              type="button"
-              onClick={() => {
-                setTag(item.slug);
-                setFilter('all');
-                selectCategory('');
-              }}
-              key={item.slug}
-            >
-              <i style={{ backgroundColor: item.color }} />
-              {item.name}
-            </button>
-          ))}
-        </nav>
+        {tags.length ? (
+          <>
+            <h2 className="sidebar-title">Browse by tag</h2>
+            <nav className="filter-nav tag-nav" aria-label="Discussion tags">
+              {tags.map((item) => (
+                <button
+                  className={tag === item.slug ? 'active' : ''}
+                  type="button"
+                  onClick={() => {
+                    setTag(item.slug);
+                    setFilter('all');
+                    selectCategory('');
+                  }}
+                  key={item.slug}
+                >
+                  <i style={{ backgroundColor: item.color }} />
+                  {item.name}
+                </button>
+              ))}
+            </nav>
+          </>
+        ) : null}
 
         <section className="sidebar-callout">
           <strong>Make the community better</strong>
@@ -227,21 +231,30 @@ export function ForumHome() {
           </select>
         </div>
 
-        {demo ? (
-          <p className="demo-notice" role="status">
-            Showing sample discussions because the community database is unavailable.
+        {loadError ? (
+          <p className="form-error" role="alert">
+            {loadError}
           </p>
         ) : null}
 
         <div className="discussion-grid" aria-busy={loading}>
-          {visible.length ? (
+          {loading ? (
+            <div className="empty-state">
+              <p>Loading discussions…</p>
+            </div>
+          ) : visible.length ? (
             visible.map((discussion) => (
               <DiscussionCard discussion={discussion} key={discussion.id} />
             ))
-          ) : (
+          ) : loadError ? null : discussions.length ? (
             <div className="empty-state">
               <h3>No discussions found</h3>
               <p>Try another filter or start a new conversation.</p>
+            </div>
+          ) : (
+            <div className="empty-state">
+              <h3>No discussions yet</h3>
+              <p>Be the first to start a conversation in this community.</p>
             </div>
           )}
         </div>
@@ -265,17 +278,19 @@ export function ForumHome() {
             Community is ready
           </p>
         </section>
-        <section className="rail-card">
-          <h2>Trending this week</h2>
-          <div className="trending-list">
-            {trending.map((discussion) => (
-              <Link href={`/discussions/${discussion.id}`} key={discussion.id}>
-                <strong>{discussion.title}</strong>
-                <span>{discussion.views} views</span>
-              </Link>
-            ))}
-          </div>
-        </section>
+        {trending.length ? (
+          <section className="rail-card">
+            <h2>Trending this week</h2>
+            <div className="trending-list">
+              {trending.map((discussion) => (
+                <Link href={`/discussions/${discussion.id}`} key={discussion.id}>
+                  <strong>{discussion.title}</strong>
+                  <span>{discussion.views} views</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </aside>
     </main>
   );

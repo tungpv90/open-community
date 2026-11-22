@@ -8,7 +8,7 @@ import type { CSSProperties, FormEvent } from 'react';
 import { RichContent, RichEditor } from '@/components/editor/rich-editor';
 import { useCommunity } from '@/components/session/community-provider';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { demoDiscussions, initials, normalizeDiscussion, withRootPost } from '@/lib/forum';
+import { initials, normalizeDiscussion, withRootPost } from '@/lib/forum';
 import type { ForumDiscussion, ForumPost } from '@/lib/forum';
 import { api, errorMessage } from '@/utils/api/client';
 
@@ -60,7 +60,8 @@ export function DiscussionDetail({ discussionId }: { discussionId: string }) {
   const { user, isAdmin } = useCommunity();
   const [discussion, setDiscussion] = useState<ForumDiscussion | null>(null);
   const [posts, setPosts] = useState<ForumPost[]>([]);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'demo' | 'missing'>('loading');
+  const [status, setStatus] = useState<'loading' | 'ready' | 'missing' | 'failed'>('loading');
+  const [loadError, setLoadError] = useState('');
   const [reply, setReply] = useState('');
   const [editorKey, setEditorKey] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -90,16 +91,10 @@ export function DiscussionDetail({ discussionId }: { discussionId: string }) {
         setStatus('ready');
         recordView(discussionId);
       })
-      .catch(() => {
+      .catch((loadFailure) => {
         if (cancelled) return;
-        const fallback = demoDiscussions.find((item) => item.id === discussionId);
-        if (fallback) {
-          setDiscussion(fallback);
-          setPosts([]);
-          setStatus('demo');
-        } else {
-          setStatus('missing');
-        }
+        setLoadError(errorMessage(loadFailure, 'Could not load this discussion'));
+        setStatus('failed');
       });
     return () => {
       cancelled = true;
@@ -183,6 +178,22 @@ export function DiscussionDetail({ discussionId }: { discussionId: string }) {
     );
   }
 
+  if (status === 'failed') {
+    return (
+      <main className="content-page">
+        <div className="empty-state">
+          <h1>Discussion unavailable</h1>
+          <p className="form-error" role="alert">
+            {loadError}
+          </p>
+          <Link className="button button-primary" href="/">
+            Back to discussions
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   if (status === 'missing' || !discussion) {
     return (
       <main className="content-page">
@@ -209,9 +220,9 @@ export function DiscussionDetail({ discussionId }: { discussionId: string }) {
           <Link href={`/?category=${encodeURIComponent(discussion.category.slug)}`}>
             {discussion.category.name}
           </Link>
-        ) : (
+        ) : discussion.tag ? (
           <span>{discussion.tag.name}</span>
-        )}
+        ) : null}
       </nav>
       <header className="discussion-header">
         <div>
@@ -223,12 +234,14 @@ export function DiscussionDetail({ discussionId }: { discussionId: string }) {
               {discussion.category.name}
             </span>
           ) : null}{' '}
-          <span
-            className="tag-pill"
-            style={{ '--tag-color': discussion.tag.color } as CSSProperties}
-          >
-            {discussion.tag.name}
-          </span>
+          {discussion.tag ? (
+            <span
+              className="tag-pill"
+              style={{ '--tag-color': discussion.tag.color } as CSSProperties}
+            >
+              {discussion.tag.name}
+            </span>
+          ) : null}
           <h1>{discussion.title}</h1>
           <p>
             Started by {discussion.author.name} · {discussion.createdAt} · {discussion.views} views
@@ -262,13 +275,6 @@ export function DiscussionDetail({ discussionId }: { discussionId: string }) {
           ) : null}
         </div>
       </header>
-
-      {status === 'demo' ? (
-        <p className="demo-notice" role="status">
-          This is a sample discussion. Replies are available once the community database is
-          connected.
-        </p>
-      ) : null}
 
       <section className="post-list" aria-label="Posts">
         {withRootPost(discussion, posts).map((post, index) => (

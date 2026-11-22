@@ -7,7 +7,7 @@ import type { FormEvent } from 'react';
 
 import { RichEditor } from '@/components/editor/rich-editor';
 import { useCommunity } from '@/components/session/community-provider';
-import { defaultTags, normalizeCategory } from '@/lib/forum';
+import { normalizeCategory } from '@/lib/forum';
 import type { ForumCategory, ForumTag } from '@/lib/forum';
 import { api, errorMessage } from '@/utils/api/client';
 
@@ -27,7 +27,7 @@ export function DiscussionComposer(props: ComposerProps) {
   const [content, setContent] = useState('');
   const [initialContent, setInitialContent] = useState<string | null>(editing ? null : '');
   const [tagId, setTagId] = useState('');
-  const [tags, setTags] = useState<ForumTag[]>(defaultTags);
+  const [tags, setTags] = useState<ForumTag[]>([]);
   const [categoryId, setCategoryId] = useState('');
   const [categories, setCategories] = useState<ForumCategory[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -185,7 +185,7 @@ export function DiscussionComposer(props: ComposerProps) {
             </small>
           ) : null}
         </label>
-        {editing ? null : (
+        {editing || !tags.length ? null : (
           <label>
             <span>Tag</span>
             <select value={tagId} onChange={(event) => setTagId(event.target.value)}>

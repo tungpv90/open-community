@@ -27,12 +27,14 @@ export function DiscussionCard({ discussion }: { discussion: ForumDiscussion }) 
               {discussion.category.name}
             </span>
           ) : null}
-          <span
-            className="tag-pill"
-            style={{ '--tag-color': discussion.tag.color } as React.CSSProperties}
-          >
-            {discussion.tag.name}
-          </span>
+          {discussion.tag ? (
+            <span
+              className="tag-pill"
+              style={{ '--tag-color': discussion.tag.color } as React.CSSProperties}
+            >
+              {discussion.tag.name}
+            </span>
+          ) : null}
           <span>{discussion.author.name}</span>
           <span>{discussion.createdAt}</span>
         </div>
