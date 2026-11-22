@@ -10,6 +10,10 @@ import '@/styles/editor.css';
 import { SiteHeader } from '@/components/layout/site-header';
 import { CommunityProvider } from '@/components/session/community-provider';
 
+// Render pages per request so they are sent with `no-store`. Prerendered pages carry
+// `s-maxage=31536000`, which lets a caching reverse proxy serve an old build for a year.
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: { default: 'Flarum Community', template: '%s · Flarum Community' },
   description: 'Get help, share knowledge, and connect with the community.',

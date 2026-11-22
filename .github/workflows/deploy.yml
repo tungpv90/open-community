@@ -296,6 +296,19 @@ jobs:
             exit 1
           fi
           echo
+
+          # A caching reverse proxy would keep serving pages from the previous build; clear it.
+          if command -v nginx >/dev/null 2>&1; then
+            caches=$($SUDO nginx -T 2>/dev/null |
+              sed -nE 's/^[[:space:]]*proxy_cache_path[[:space:]]+([^[:space:];]+).*/\1/p' | sort -u)
+            for dir in $caches; do
+              case "$dir" in
+                /*/*) echo "Clearing nginx cache $dir"; $SUDO find "$dir" -type f -delete ;;
+              esac
+            done
+            [ -n "$caches" ] || echo "nginx has no proxy cache configured"
+          fi
+
           $DOCKER image prune -f >/dev/null
           REMOTE
 
@@ -304,6 +317,11 @@ jobs:
           curl -fsS --retry 10 --retry-delay 5 --retry-all-errors "$PUBLIC_SITE_URL/api/health"
           echo
           echo "Deployed to $PUBLIC_SITE_URL"
+          home=$(curl -fsS -o /dev/null -D - -H 'Accept-Encoding: gzip, br' "$PUBLIC_SITE_URL/")
+          printf '%s\n' "$home" | grep -iE '^(cache-control|x-cache|cf-cache-status):' || true
+          if printf '%s' "$home" | grep -qiE '^x-cache: *HIT'; then
+            echo "::warning::A proxy served the home page from its cache; visitors may see an old build."
+          fi
           if curl -fsS "$PUBLIC_SITE_URL/api/categories" >/dev/null; then
             echo "Database reads work"
           else
