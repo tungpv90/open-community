@@ -70,7 +70,7 @@ Registration works without email confirmation, so signups are protected in three
 - **Honeypot:** the signup form has a hidden `website` field; requests that fill it get a fake success and create nothing.
 - **New-account limits:** accounts younger than 24 hours may start 3 discussions and write 10 posts per hour, enforced by a database trigger (`supabase/migrations/20261122010000_new_account_limits.sql`).
 
-Never expose a Supabase service-role key in this project. For a new Supabase project, run `supabase-schema.sql` once; existing databases apply the incremental files in `supabase/migrations/`. After the first administrator signs up, promote them with the `user_roles` insert at the end of `supabase-schema.sql`.
+Never expose a Supabase service-role key in this project. For a new Supabase project, run `supabase-schema.sql` once; existing databases apply the incremental files in `supabase/migrations/`. Both create the default administrator `admin@apaxsoft.com` with the initial password `admin@12345`; the administration console requires a new password before it opens, so sign in and change it right after the first deploy.
 
 ## Development
 

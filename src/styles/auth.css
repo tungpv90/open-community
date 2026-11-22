@@ -172,9 +172,18 @@
 }
 
 .auth-options a,
-.auth-switch a {
+.auth-switch a,
+.auth-switch .link-button {
   color: var(--brand);
   font-weight: 700;
+}
+
+.auth-switch .link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
 }
 
 .auth-switch {

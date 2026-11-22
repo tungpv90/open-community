@@ -164,6 +164,18 @@ async function handleAuthRoute(request, url, supabase, environment) {
     ]);
     const forumRole =
       role.body[0]?.role === 'admin' ? 'admin' : profile.body[0]?.forum_role || 'member';
+    // Administrators still using the initial password must change it before using the console.
+    const passwordChangeRequired =
+      forumRole === 'admin'
+        ? await supabase
+            .request(
+              '/rest/v1/rpc/forum_password_change_required',
+              { method: 'POST', body: '{}' },
+              token,
+            )
+            .then(({ body }) => body === true)
+            .catch(() => false)
+        : false;
 
     return json({
       user: {
@@ -171,6 +183,7 @@ async function handleAuthRoute(request, url, supabase, environment) {
         profile: profile.body[0] || null,
         role: forumRole,
         forum_schema_ready: Boolean(profile.body[0]),
+        password_change_required: passwordChangeRequired,
       },
     });
   }

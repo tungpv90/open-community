@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 
 import { AdminDataProvider } from '@/components/admin/admin-data';
+import { PasswordChangeRequired } from '@/components/admin/password-change-required';
 import { displayName, useCommunity } from '@/components/session/community-provider';
 import { resolveHeaderBrand } from '@/lib/community-settings';
 
@@ -97,6 +98,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
       />
     );
   }
+
+  if (user.password_change_required) return <PasswordChangeRequired />;
 
   async function logout() {
     await signOut();

@@ -20,6 +20,8 @@ export type CommunityUser = {
   id: string;
   email?: string;
   role: CommunityRole;
+  /** True while an administrator still uses the initial password. */
+  password_change_required?: boolean;
   profile: {
     display_name?: string;
     username?: string;
