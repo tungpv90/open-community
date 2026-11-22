@@ -9,14 +9,23 @@ services:
     container_name: flarum-community
     restart: unless-stopped
     ports:
-      - "${FORUM_PORT:-3000}:3000"
+      - '${FORUM_PORT:-3000}:3000'
     environment:
       NODE_ENV: production
       PORT: 3000
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-http://localhost:3000}
+      AUTH_OAUTH_PROVIDERS: ${AUTH_OAUTH_PROVIDERS:-google,facebook,linkedin}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
       interval: 30s
       timeout: 5s
       start_period: 10s
@@ -26,4 +35,3 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=32m,mode=1777
-

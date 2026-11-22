@@ -1,0 +1,217 @@
+.auth-page {
+  display: grid;
+  min-height: calc(100vh - 72px);
+  place-items: center;
+  padding: 48px 16px 80px;
+  background:
+    radial-gradient(
+      circle at 15% 15%,
+      color-mix(in srgb, var(--brand) 12%, transparent),
+      transparent 28%
+    ),
+    radial-gradient(circle at 85% 80%, rgba(108, 92, 231, 0.09), transparent 30%), var(--background);
+}
+
+.auth-card {
+  width: min(480px, 100%);
+  padding: 32px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.compact-card {
+  width: min(440px, 100%);
+}
+
+.auth-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 25px;
+}
+
+.auth-mark {
+  flex: 0 0 auto;
+}
+
+.auth-heading p {
+  margin: 0 0 3px;
+  color: var(--brand);
+  font-size: 0.75rem;
+  font-weight: 750;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.auth-heading h1 {
+  margin: 0 0 5px;
+  color: var(--heading);
+  font-size: 1.55rem;
+  line-height: 1.2;
+}
+
+.auth-heading div > span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.oauth-grid {
+  display: grid;
+  gap: 9px;
+}
+
+.oauth-grid button {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 13px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--heading);
+  font-size: 0.86rem;
+  font-weight: 650;
+  text-align: left;
+}
+
+.oauth-grid button:hover {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--border));
+  background: var(--surface-soft);
+}
+
+.oauth-grid b {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--brand);
+}
+
+.oauth-grid .apax-id-button,
+.oauth-grid .apax-id-button[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--border));
+}
+
+.oauth-grid .apax-id-button b {
+  background: var(--brand);
+  color: #fff;
+}
+
+.auth-hint {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--brand) 30%, var(--border));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--brand) 8%, var(--surface));
+  color: var(--heading);
+  font-size: 0.86rem;
+}
+
+/* Spam trap: kept in the DOM for bots but out of sight and out of the tab order. */
+.auth-honeypot {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* Turnstile renders a fixed 300px iframe; keep it from overflowing narrow cards. */
+.auth-captcha {
+  min-height: 65px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  height: 1px;
+  flex: 1;
+  background: var(--border);
+  content: '';
+}
+
+.auth-card form {
+  display: grid;
+  gap: 15px;
+}
+
+.auth-card form > label:not(.check-row) {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-card form > label > span {
+  color: var(--heading);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.auth-card input:not([type='checkbox']) {
+  width: 100%;
+  height: 46px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--background);
+}
+
+.auth-card input:focus {
+  border-color: var(--brand);
+  background: var(--surface);
+}
+
+.auth-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.auth-options a,
+.auth-switch a {
+  color: var(--brand);
+  font-weight: 700;
+}
+
+.auth-switch {
+  margin: 22px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .auth-page {
+    min-height: calc(100vh - 64px);
+    align-items: start;
+    padding-top: 24px;
+  }
+
+  .auth-card {
+    padding: 25px 20px;
+  }
+}

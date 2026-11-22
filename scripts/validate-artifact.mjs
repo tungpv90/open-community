@@ -1,50 +1,58 @@
-import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import assert from 'node:assert/strict';
+import { access, readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 
-const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const workerPath = resolve(projectRoot, "dist/server/index.js");
-const manifestPath = resolve(projectRoot, "dist/.openai/hosting.json");
+const projectRoot = resolve(import.meta.dirname, '..');
+const nextRoot = resolve(projectRoot, '.next');
+const appPathsPath = resolve(nextRoot, 'server/app-paths-manifest.json');
+const routesPath = resolve(nextRoot, 'routes-manifest.json');
 
-const [source, manifest] = await Promise.all([
-  readFile(workerPath, "utf8"),
-  readFile(manifestPath, "utf8"),
+await Promise.all([
+  access(resolve(nextRoot, 'BUILD_ID')),
+  access(resolve(nextRoot, 'static')),
+  access(appPathsPath),
+  access(routesPath),
 ]);
-JSON.parse(manifest);
 
-const workerModule = await import(`${pathToFileURL(workerPath)}?validate=${Date.now()}`);
-assert.equal(
-  typeof workerModule.default?.fetch,
-  "function",
-  `${pathToFileURL(workerPath)} must export default.fetch`,
+const [appPaths, routes] = await Promise.all([
+  readFile(appPathsPath, 'utf8').then(JSON.parse),
+  readFile(routesPath, 'utf8').then(JSON.parse),
+]);
+
+const requiredPages = [
+  '/page',
+  '/login/page',
+  '/signup/page',
+  '/forgot-password/page',
+  '/reset-password/page',
+  '/notifications/page',
+  '/discussions/new/page',
+  '/discussions/[id]/page',
+  '/discussions/[id]/edit/page',
+  '/admin/page',
+  '/admin/users/page',
+  '/admin/groups/page',
+  '/admin/discussions/page',
+  '/admin/categories/page',
+  '/admin/tags/page',
+  '/admin/moderation/page',
+  '/admin/settings/page',
+  '/admin/appearance/page',
+  '/admin/header/page',
+  '/admin/email/page',
+];
+for (const page of requiredPages) {
+  assert.ok(appPaths[page], `The route ${page} must be present in the Next.js artifact`);
+}
+assert.ok(
+  appPaths['/api/[...path]/route'],
+  'The catch-all community API route must be present in the Next.js artifact',
 );
 
-const environment = {};
-const home = await workerModule.default.fetch(new Request("http://local.test/"), environment);
-const css = await workerModule.default.fetch(new Request("http://local.test/assets/styles.css"), environment);
-const client = await workerModule.default.fetch(new Request("http://local.test/assets/app.js"), environment);
-const versionedCss = await workerModule.default.fetch(new Request("http://local.test/assets/styles.css?v=test"), environment);
-const versionedClient = await workerModule.default.fetch(new Request("http://local.test/assets/app.js?v=test"), environment);
-const health = await workerModule.default.fetch(new Request("http://local.test/api/health"), environment);
+const responseHeaders = JSON.stringify(routes.headers || []);
+assert.match(responseHeaders, /X-Frame-Options/i);
+assert.match(responseHeaders, /Permissions-Policy/i);
 
-assert.equal(home.status, 200);
-assert.match(home.headers.get("content-type") || "", /text\/html/);
-assert.match(home.headers.get("cache-control") || "", /no-cache/);
-const html = await home.text();
-assert.match(html, /Community pulse/);
-assert.match(html, /\/assets\/styles\.css\?v=[a-f0-9]{12}/);
-assert.match(html, /\/assets\/app\.js\?v=[a-f0-9]{12}/);
-assert.equal(css.status, 200);
-assert.match(css.headers.get("content-type") || "", /text\/css/);
-assert.match(css.headers.get("cache-control") || "", /no-cache/);
-assert.match(await css.text(), /community-redesign/);
-assert.equal(client.status, 200);
-assert.match(client.headers.get("content-type") || "", /javascript/);
-assert.match(client.headers.get("cache-control") || "", /no-cache/);
-assert.match(await client.text(), /function render/);
-assert.match(versionedCss.headers.get("cache-control") || "", /immutable/);
-assert.match(versionedClient.headers.get("cache-control") || "", /immutable/);
-assert.deepEqual(await health.json(), { status: "ok", service: "flarum-community", supabase: "demo" });
-
-console.log("Artifact is valid and serves HTML, CSS, JavaScript, and API routes");
+console.log(
+  `Next.js artifact is valid: ${requiredPages.length} pages, the community API, and security headers`,
+);

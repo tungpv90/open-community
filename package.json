@@ -1,16 +1,40 @@
 {
-  "name": "flarum-community-node",
+  "name": "open-community",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "dev": "node --watch-path=src --watch-path=worker --watch-path=server.mjs scripts/dev.mjs",
-    "start": "node scripts/dev.mjs",
-    "build": "node scripts/build.mjs",
+    "dev": "next dev",
+    "start": "next start",
+    "start:production": "next start",
+    "clean": "node -e \"const fs=require('node:fs');for(const path of ['.next','.next-dev'])fs.rmSync(path,{recursive:true,force:true})\"",
+    "format": "prettier --write --ignore-unknown .",
+    "format:check": "prettier --check --ignore-unknown .",
+    "test": "node --test",
+    "build": "next build",
     "validate": "node scripts/validate-artifact.mjs",
-    "check": "node --check src/app.js && node --check worker/api.js && node --check server.mjs",
+    "check": "tsc --noEmit && node scripts/check.mjs && npm run format:check",
     "docker:build": "docker build -t flarum-community:latest .",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
     "deploy": "docker compose up -d --build --remove-orphans"
+  },
+  "dependencies": {
+    "next": "15.5.29",
+    "react": "19.1.5",
+    "react-dom": "19.1.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "@types/react": "19.1.13",
+    "@types/react-dom": "19.1.9",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2"
+  },
+  "overrides": {
+    "postcss": "8.5.23"
   }
 }

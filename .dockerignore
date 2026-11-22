@@ -4,12 +4,13 @@
 .env.*
 node_modules
 dist
+.next
+.next-dev
 outputs
 coverage
 *.log
 *.tar.gz
 README.md
-supabase-schema.sql
 compose*.yaml
 compose.override.yaml
 docker-compose.override.yml

@@ -10,9 +10,12 @@ node_modules/
 
 # Generated output
 dist/
+.next/
+.next-dev/
 outputs/
 coverage/
 .cache/
+*.tsbuildinfo
 *.tar.gz
 
 # Logs and editor files
