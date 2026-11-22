@@ -22,7 +22,8 @@ export type ForumPost = {
   id: string;
   author: ForumAuthor;
   content: string;
-  createdAt: string;
+  /** ISO creation time, when known. Render it with `RelativeTime`. */
+  createdIso?: string;
   likes: number;
   liked?: boolean;
   /** The discussion's opening content, which is stored on the discussion rather than as a post. */
@@ -37,7 +38,8 @@ export type ForumDiscussion = {
   author: ForumAuthor;
   /** The discussion's category; absent only for legacy rows. */
   category: ForumCategory | null;
-  createdAt: string;
+  /** ISO creation time, when known. Render it with `RelativeTime`. */
+  createdIso?: string;
   /** Creation time in epoch milliseconds, when known. */
   createdTime?: number;
   updatedAt: number;
@@ -83,7 +85,8 @@ export function normalizeDiscussion(input: Record<string, any>): ForumDiscussion
   return {
     id: String(input.id),
     title: input.title || 'Untitled discussion',
-    excerpt: excerpt(input.content || ''),
+    // Lists carry a short `preview`; the full `content` arrives only with a single discussion.
+    excerpt: excerpt(input.preview ?? input.content ?? ''),
     content: input.content || '',
     author: {
       name,
@@ -92,9 +95,7 @@ export function normalizeDiscussion(input: Record<string, any>): ForumDiscussion
       color: profile.avatar_color || '#6c5ce7',
     },
     category: normalizeCategory(input.category),
-    createdAt: input.created_at
-      ? new Date(input.created_at).toLocaleDateString('en-US')
-      : 'Recently',
+    createdIso: input.created_at ? String(input.created_at) : undefined,
     createdTime: input.created_at ? new Date(input.created_at).getTime() : undefined,
     updatedAt: input.updated_at ? new Date(input.updated_at).getTime() : Date.now(),
     replies: input.reply_count || 0,
@@ -119,7 +120,7 @@ export function withRootPost(discussion: ForumDiscussion, replies: ForumPost[]):
       id: `root-${discussion.id}`,
       author: discussion.author,
       content: discussion.content,
-      createdAt: discussion.createdAt,
+      createdIso: discussion.createdIso,
       likes: 0,
       isRoot: true,
     },

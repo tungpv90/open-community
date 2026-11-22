@@ -2,15 +2,16 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
 
 import { RichContent, RichEditor } from '@/components/editor/rich-editor';
 import { useCommunity } from '@/components/session/community-provider';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { RelativeTime } from '@/components/ui/relative-time';
 import { initials, normalizeDiscussion, withRootPost } from '@/lib/forum';
 import type { ForumDiscussion, ForumPost } from '@/lib/forum';
-import { api, errorMessage } from '@/utils/api/client';
+import { api, ApiError, errorMessage } from '@/utils/api/client';
 
 type RemotePost = {
   id: string;
@@ -28,7 +29,7 @@ function normalizePost(post: RemotePost): ForumPost {
   return {
     id: String(post.id),
     content: post.content || '',
-    createdAt: post.created_at ? new Date(post.created_at).toLocaleString() : 'Recently',
+    createdIso: post.created_at,
     likes: post.like_count || 0,
     liked: post.viewer_liked,
     author: {
@@ -55,12 +56,32 @@ function recordView(discussionId: string) {
   }).catch(() => undefined);
 }
 
-export function DiscussionDetail({ discussionId }: { discussionId: string }) {
+type Thread = { discussion: Record<string, any>; posts: RemotePost[] };
+
+function visiblePosts(posts: RemotePost[]) {
+  return posts.filter((post) => !post.is_hidden).map(normalizePost);
+}
+
+export function DiscussionDetail({
+  discussionId,
+  initialThread,
+}: {
+  discussionId: string;
+  /** The anonymous view rendered on the server; undefined when it could not be loaded there. */
+  initialThread?: Record<string, any> | null;
+}) {
   const router = useRouter();
-  const { user, isAdmin } = useCommunity();
-  const [discussion, setDiscussion] = useState<ForumDiscussion | null>(null);
-  const [posts, setPosts] = useState<ForumPost[]>([]);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'missing' | 'failed'>('loading');
+  const { ready, user, isAdmin } = useCommunity();
+  const initial = initialThread as Thread | null | undefined;
+  const [discussion, setDiscussion] = useState<ForumDiscussion | null>(() =>
+    initial ? normalizeDiscussion(initial.discussion) : null,
+  );
+  const [posts, setPosts] = useState<ForumPost[]>(() =>
+    initial ? visiblePosts(initial.posts) : [],
+  );
+  const [status, setStatus] = useState<'loading' | 'ready' | 'missing' | 'failed'>(
+    initial ? 'ready' : 'loading',
+  );
   const [loadError, setLoadError] = useState('');
   const [reply, setReply] = useState('');
   const [editorKey, setEditorKey] = useState(0);
@@ -71,35 +92,51 @@ export function DiscussionDetail({ discussionId }: { discussionId: string }) {
   const [deleteError, setDeleteError] = useState('');
 
   const encodedId = encodeURIComponent(discussionId);
+  // The server already rendered what anonymous visitors see; only signed-in viewers reload.
+  const serverDataFresh = useRef(Boolean(initial));
+  const userId = user?.id || '';
 
-  const loadPosts = useCallback(async () => {
-    const detail = await api<{ posts: RemotePost[] }>(`/api/discussions/${encodedId}`);
-    setPosts(detail.posts.filter((post) => !post.is_hidden).map(normalizePost));
+  const loadThread = useCallback(async () => {
+    const thread = await api<Thread>(`/api/discussions/${encodedId}`);
+    setDiscussion(normalizeDiscussion(thread.discussion));
+    setPosts(visiblePosts(thread.posts));
+    setStatus('ready');
   }, [encodedId]);
 
   useEffect(() => {
+    if (initial) recordView(discussionId);
+    // Runs once per discussion; `initial` belongs to that discussion.
+  }, [discussionId]);
+
+  useEffect(() => {
+    if (!ready) return;
+    if (!userId && serverDataFresh.current) {
+      serverDataFresh.current = false;
+      return;
+    }
+    const firstLoad = !serverDataFresh.current && status === 'loading';
+    serverDataFresh.current = false;
     let cancelled = false;
-    Promise.all([api<{ discussions: Record<string, any>[] }>('/api/discussions'), loadPosts()])
-      .then(([list]) => {
-        if (cancelled) return;
-        const match = list.discussions.find((item) => String(item.id) === discussionId);
-        if (!match) {
-          setStatus('missing');
-          return;
-        }
-        setDiscussion(normalizeDiscussion(match));
-        setStatus('ready');
-        recordView(discussionId);
+    loadThread()
+      .then(() => {
+        if (firstLoad && !cancelled) recordView(discussionId);
       })
       .catch((loadFailure) => {
         if (cancelled) return;
+        if (loadFailure instanceof ApiError && loadFailure.status === 404) {
+          setStatus('missing');
+          return;
+        }
+        // Keep showing the server-rendered thread if only the personalised reload failed.
+        if (discussion) return;
         setLoadError(errorMessage(loadFailure, 'Could not load this discussion'));
         setStatus('failed');
       });
     return () => {
       cancelled = true;
     };
-  }, [discussionId, loadPosts, user]);
+    // Reload only when the viewer changes; status and discussion are read for the first load.
+  }, [discussionId, loadThread, ready, userId]);
 
   async function submitReply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -114,10 +151,10 @@ export function DiscussionDetail({ discussionId }: { discussionId: string }) {
         method: 'POST',
         body: JSON.stringify({ content: reply }),
       });
-      await loadPosts();
       setReply('');
       setEditorKey((key) => key + 1);
-      if (discussion) setDiscussion({ ...discussion, replies: discussion.replies + 1 });
+      // The reply is saved; a failed refresh only delays showing it.
+      await loadThread().catch(() => undefined);
     } catch (submitError) {
       setError(errorMessage(submitError, 'Could not post reply'));
     } finally {
@@ -234,8 +271,9 @@ export function DiscussionDetail({ discussionId }: { discussionId: string }) {
           ) : null}
           <h1>{discussion.title}</h1>
           <p>
-            Started by {discussion.author.name} · {discussion.createdAt} · {discussion.views} views
-            · {discussion.replies} replies
+            Started by {discussion.author.name} · <RelativeTime value={discussion.createdIso} /> ·{' '}
+            {discussion.views} {discussion.views === 1 ? 'view' : 'views'} · {discussion.replies}{' '}
+            {discussion.replies === 1 ? 'reply' : 'replies'}
           </p>
         </div>
         <div className="discussion-actions">
@@ -278,7 +316,7 @@ export function DiscussionDetail({ discussionId }: { discussionId: string }) {
             </aside>
             <div className="post-body">
               <header>
-                <span>{post.createdAt}</span>
+                <RelativeTime value={post.createdIso} />
                 <a href={`#post-${index + 1}`}>#{index + 1}</a>
               </header>
               <RichContent className="post-content" value={post.content} />

@@ -37,15 +37,20 @@ export function DiscussionComposer(props: ComposerProps) {
 
   useEffect(() => {
     if (!ready || !user) return;
-    api<{ discussions: Record<string, any>[]; categories?: unknown[] }>('/api/discussions')
-      .then((result) => {
+    Promise.all([
+      api<{ categories?: unknown[] }>('/api/categories'),
+      editing
+        ? api<{ discussion: Record<string, any> }>(`/api/discussions/${encodedId}`)
+        : Promise.resolve(null),
+    ])
+      .then(([result, thread]) => {
         setCategories(
           (result.categories || [])
             .map(normalizeCategory)
             .filter((category): category is ForumCategory => Boolean(category)),
         );
         if (editing) {
-          const match = result.discussions.find((item) => String(item.id) === discussionId);
+          const match = thread?.discussion;
           if (!match) throw new Error('Discussion not found');
           const loaded: LoadedDiscussion = {
             title: match.title || '',
@@ -62,7 +67,7 @@ export function DiscussionComposer(props: ComposerProps) {
         setCategories((current) => current || []);
         setError(errorMessage(loadError, 'Could not load the discussion'));
       });
-  }, [discussionId, editing, ready, user]);
+  }, [editing, encodedId, ready, user]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

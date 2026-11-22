@@ -12,6 +12,7 @@ import {
 } from '@/components/admin/admin-data';
 import type { AdminReport } from '@/components/admin/admin-data';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { RelativeTime } from '@/components/ui/relative-time';
 import { normalizeDiscussion } from '@/lib/forum';
 import type { ForumDiscussion } from '@/lib/forum';
 import { api, errorMessage } from '@/utils/api/client';
@@ -83,7 +84,7 @@ export function DiscussionsPanel() {
                     <span className="user-cell">
                       <Link href={`/discussions/${encodeURIComponent(item.id)}`}>{item.title}</Link>
                       <small>
-                        by {item.author.name} · {item.createdAt}
+                        by {item.author.name} · <RelativeTime value={item.createdIso} />
                       </small>
                     </span>
                     <span>

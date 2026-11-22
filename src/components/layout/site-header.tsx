@@ -10,7 +10,7 @@ import {
   useCommunity,
 } from '@/components/session/community-provider';
 import { isExternalUrl, resolveHeaderBrand, resolveHeaderMenu } from '@/lib/community-settings';
-import { api } from '@/utils/api/client';
+import { api, notificationsChangeEvent } from '@/utils/api/client';
 
 type NavItem = { href: string; label: string; external: boolean; active: boolean };
 
@@ -37,20 +37,41 @@ export function SiteHeader() {
   const [unread, setUnread] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const checkUnread = useRef<(force?: boolean) => void>(() => undefined);
 
   useEffect(() => {
     setDark(document.documentElement.dataset.theme === 'dark');
   }, [settings]);
 
+  const userId = user?.id || '';
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setUnread(0);
       return;
     }
-    api<{ notifications: { is_read?: boolean }[] }>('/api/notifications')
-      .then((result) => setUnread(result.notifications.filter((item) => !item.is_read).length))
-      .catch(() => setUnread(0));
-  }, [user, pathname]);
+    let lastChecked = 0;
+    const check = (force = false) => {
+      // Navigation and focus fire often; one lightweight count per 30 seconds is plenty.
+      if (!force && Date.now() - lastChecked < 30_000) return;
+      lastChecked = Date.now();
+      api<{ unread: number }>('/api/notifications/unread')
+        .then((result) => setUnread(result.unread))
+        .catch(() => undefined);
+    };
+    const onFocus = () => check();
+    const onChange = () => check(true);
+    check(true);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener(notificationsChangeEvent, onChange);
+    checkUnread.current = check;
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener(notificationsChangeEvent, onChange);
+      checkUnread.current = () => undefined;
+    };
+  }, [userId]);
+
+  useEffect(() => checkUnread.current(), [pathname]);
 
   useEffect(() => setMenuOpen(false), [pathname]);
 
@@ -165,6 +186,10 @@ export function SiteHeader() {
                 <span className="notification-badge">{unread > 9 ? '9+' : unread}</span>
               ) : null}
             </Link>
+          ) : null}
+          {/* Holds the space of the sign-in buttons until the session is known. */}
+          {!ready ? (
+            <span className="skeleton header-actions-placeholder" aria-hidden="true" />
           ) : null}
           {ready && !user ? (
             <>

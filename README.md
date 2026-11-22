@@ -7,7 +7,7 @@ A Flarum-inspired community forum built with Next.js 15, Supabase authentication
 - Discussion feed, categories, search, sorting, replies, likes, follows, notifications, and dark mode.
 - Administration for community settings, appearance, users, groups, categories, discussions, and moderation.
 - Accounts in a dedicated Supabase project (`auth.users`), with administrators listed in `public.user_roles`.
-- Sample discussions when the Supabase API is unavailable.
+- Server-rendered feed and discussion pages backed by a short-lived in-process cache, so pages arrive with content and without waiting on the database.
 - Non-root, read-only Docker runtime with a health check.
 
 ## Project structure
@@ -39,7 +39,9 @@ test/                          Node.js source tests
 scripts/                       Validation and operational tooling
 ```
 
-`CommunityProvider` (`src/components/session/`) loads `/api/config` and `/api/me`, applies admin-configured branding and colors, and stores sessions returned by Supabase OAuth, email confirmation, or password recovery links on any page.
+`CommunityProvider` (`src/components/session/`) receives the saved settings from the root layout, loads `/api/me`, applies admin-configured branding and colors, and stores sessions returned by Supabase OAuth, email confirmation, or password recovery links on any page.
+
+The home feed and discussion pages are rendered on the server from `src/utils/server-data.ts`. Public, viewer-independent reads (settings, categories, the discussion list, and single threads) go through the in-process cache in `src/server/services/cache.js`: entries are fresh for 15 seconds and are then served while a background refresh runs. Every write through the API clears the cache, so visitors see their own changes immediately; changes made directly in the database appear within one refresh. The browser adds viewer-specific state (follows, likes) after signing in.
 
 Password recovery emails redirect to `${PUBLIC_SITE_URL}/reset-password`; add that URL to the Supabase Auth redirect allow list.
 

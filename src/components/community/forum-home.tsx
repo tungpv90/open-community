@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { DiscussionCard } from '@/components/community/discussion-card';
 import { useCommunity } from '@/components/session/community-provider';
@@ -9,6 +9,8 @@ import { defaultWelcome } from '@/lib/community-settings';
 import { normalizeCategory, normalizeDiscussion } from '@/lib/forum';
 import type { ForumCategory, ForumDiscussion } from '@/lib/forum';
 import { api, errorMessage } from '@/utils/api/client';
+
+type FeedData = { discussions: Record<string, any>[]; categories?: unknown[] };
 
 type Filter = 'all' | 'following' | 'unanswered' | 'popular';
 type Sort = 'latest' | 'newest' | 'top';
@@ -21,53 +23,106 @@ function writeCategoryParam(slug: string) {
   window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}`);
 }
 
-export function ForumHome() {
-  const { settings, user } = useCommunity();
+function readCategories(data: FeedData | null) {
+  return (data?.categories || [])
+    .map(normalizeCategory)
+    .filter((item): item is ForumCategory => Boolean(item));
+}
+
+/** Views plus weighted replies: how much attention a discussion is getting. */
+function engagement(discussion: ForumDiscussion) {
+  return discussion.views + discussion.replies * 10;
+}
+
+const weekMs = 7 * 24 * 60 * 60 * 1000;
+
+function DiscussionSkeleton() {
+  return (
+    <div className="discussion-card discussion-skeleton" aria-hidden="true">
+      <span className="avatar" />
+      <div>
+        <i />
+        <i />
+        <i />
+      </div>
+    </div>
+  );
+}
+
+export function ForumHome({
+  initialData = null,
+  initialCategory = '',
+}: {
+  /** The anonymous feed rendered on the server; null when it could not be loaded there. */
+  initialData?: FeedData | null;
+  initialCategory?: string;
+}) {
+  const { ready, settings, user } = useCommunity();
   const [loadError, setLoadError] = useState('');
-  const [discussions, setDiscussions] = useState<ForumDiscussion[]>([]);
-  const [categories, setCategories] = useState<ForumCategory[]>([]);
-  const [category, setCategory] = useState('');
+  const [discussions, setDiscussions] = useState<ForumDiscussion[]>(() =>
+    (initialData?.discussions || []).map(normalizeDiscussion),
+  );
+  const [categories, setCategories] = useState<ForumCategory[]>(() => readCategories(initialData));
+  const [category, setCategory] = useState(initialCategory);
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<Sort>('latest');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialData);
+  // The server already rendered what anonymous visitors see; only signed-in viewers reload.
+  const serverDataFresh = useRef(Boolean(initialData));
+  const userId = user?.id || '';
 
   useEffect(() => {
-    setCategory(new URLSearchParams(window.location.search).get('category') || '');
-  }, []);
-
-  useEffect(() => {
-    api<{ discussions: Record<string, any>[]; categories?: unknown[] }>('/api/discussions')
+    if (!ready) return;
+    if (!userId && serverDataFresh.current) {
+      serverDataFresh.current = false;
+      return;
+    }
+    serverDataFresh.current = false;
+    let cancelled = false;
+    api<FeedData>('/api/discussions')
       .then((result) => {
+        if (cancelled) return;
         setDiscussions(result.discussions.map(normalizeDiscussion));
-        setCategories(
-          (result.categories || [])
-            .map(normalizeCategory)
-            .filter((item): item is ForumCategory => Boolean(item)),
-        );
+        setCategories(readCategories(result));
         setLoadError('');
       })
-      .catch((error) => setLoadError(errorMessage(error, 'Could not load discussions')))
-      .finally(() => setLoading(false));
-  }, [user]);
+      .catch((error) => {
+        if (!cancelled) setLoadError(errorMessage(error, 'Could not load discussions'));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, userId]);
 
   const activeCategory = categories.find((item) => item.slug === category);
 
   const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
     let result = discussions.filter((discussion) => {
       if (activeCategory && discussion.category?.slug !== activeCategory.slug) return false;
       if (filter === 'following' && !discussion.following) return false;
       if (filter === 'unanswered' && discussion.replies > 0) return false;
-      if (filter === 'popular' && discussion.views < 250) return false;
-      if (query) {
-        const haystack =
-          `${discussion.title} ${discussion.excerpt} ${discussion.author.name}`.toLowerCase();
-        if (!haystack.includes(query.toLowerCase())) return false;
+      if (filter === 'popular' && engagement(discussion) === 0) return false;
+      if (needle) {
+        const haystack = [
+          discussion.title,
+          discussion.excerpt,
+          discussion.author.name,
+          discussion.category?.name || '',
+        ]
+          .join(' ')
+          .toLowerCase();
+        if (!haystack.includes(needle)) return false;
       }
       return true;
     });
 
     result = [...result].sort((a, b) => {
+      if (filter === 'popular' && sort === 'latest') return engagement(b) - engagement(a);
       if (sort === 'top') return b.views - a.views;
       if (sort === 'newest') {
         return (b.createdTime ?? b.updatedAt) - (a.createdTime ?? a.updatedAt);
@@ -79,7 +134,15 @@ export function ForumHome() {
   }, [activeCategory, discussions, filter, query, sort]);
 
   const replies = discussions.reduce((total, discussion) => total + discussion.replies, 0);
-  const trending = [...discussions].sort((a, b) => b.views - a.views).slice(0, 3);
+  const trending = useMemo(() => {
+    const since = Date.now() - weekMs;
+    const recent = discussions.filter((discussion) => discussion.updatedAt >= since);
+    return (recent.length ? recent : discussions)
+      .filter((discussion) => engagement(discussion) > 0)
+      .sort((a, b) => engagement(b) - engagement(a))
+      .slice(0, 3);
+  }, [discussions]);
+  const searchLabel = query.trim().slice(0, 60);
 
   function selectCategory(slug: string) {
     setCategory(slug);
@@ -182,6 +245,7 @@ export function ForumHome() {
           <label className="feed-search">
             <span className="sr-only">Search discussions</span>
             <input
+              type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search discussions"
@@ -206,9 +270,12 @@ export function ForumHome() {
 
         <div className="discussion-grid" aria-busy={loading}>
           {loading ? (
-            <div className="empty-state">
-              <p>Loading discussions…</p>
-            </div>
+            <>
+              <span className="sr-only">Loading discussions…</span>
+              <DiscussionSkeleton />
+              <DiscussionSkeleton />
+              <DiscussionSkeleton />
+            </>
           ) : visible.length ? (
             visible.map((discussion) => (
               <DiscussionCard discussion={discussion} key={discussion.id} />
@@ -216,7 +283,11 @@ export function ForumHome() {
           ) : loadError ? null : discussions.length ? (
             <div className="empty-state">
               <h3>No discussions found</h3>
-              <p>Try another filter or start a new conversation.</p>
+              <p>
+                {searchLabel
+                  ? `Nothing matches “${searchLabel}”. Try different words or another filter.`
+                  : 'Try another filter or start a new conversation.'}
+              </p>
             </div>
           ) : (
             <div className="empty-state">
@@ -252,7 +323,9 @@ export function ForumHome() {
               {trending.map((discussion) => (
                 <Link href={`/discussions/${discussion.id}`} key={discussion.id}>
                   <strong>{discussion.title}</strong>
-                  <span>{discussion.views} views</span>
+                  <span>
+                    {discussion.views} views · {discussion.replies} replies
+                  </span>
                 </Link>
               ))}
             </div>

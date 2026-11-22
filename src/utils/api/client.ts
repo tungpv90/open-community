@@ -1,6 +1,8 @@
 const accessTokenKey = 'community_access_token';
 const refreshTokenKey = 'community_refresh_token';
 export const authChangeEvent = 'community-auth-change';
+/** Dispatched on `window` after notifications are marked read, so badges can refresh. */
+export const notificationsChangeEvent = 'community-notifications-change';
 
 export type AuthSession = {
   access_token: string;

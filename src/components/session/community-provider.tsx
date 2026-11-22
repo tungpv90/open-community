@@ -110,6 +110,7 @@ export function CommunityProvider({
   initialConfig?: CommunityConfig;
 }) {
   const [config, setConfig] = useState<CommunityConfig>(initialConfig);
+  const serverConfig = initialConfig !== emptyConfig;
   const [user, setUser] = useState<CommunityUser | null>(null);
   const [ready, setReady] = useState(false);
 
@@ -130,20 +131,23 @@ export function CommunityProvider({
   useEffect(() => {
     consumeAuthCallback();
 
-    const loadConfig = api<CommunityConfig>('/api/config')
-      .then((result) => {
-        setConfig(result);
-        applySettings(result.settings || {});
-      })
-      // The server already rendered the saved settings; keep them if the refresh fails.
-      .catch(() => undefined);
+    // The root layout renders the saved settings into the page, so only fetch them when it
+    // could not (for example when this provider is rendered without `initialConfig`).
+    const loadConfig = serverConfig
+      ? Promise.resolve()
+      : api<CommunityConfig>('/api/config')
+          .then((result) => {
+            setConfig(result);
+            applySettings(result.settings || {});
+          })
+          .catch(() => undefined);
 
     void Promise.all([loadConfig, refreshUser()]).finally(() => setReady(true));
 
     const onAuthChange = () => void refreshUser();
     window.addEventListener(authChangeEvent, onAuthChange);
     return () => window.removeEventListener(authChangeEvent, onAuthChange);
-  }, [refreshUser]);
+  }, [refreshUser, serverConfig]);
 
   const signOut = useCallback(async () => {
     if (getAccessToken()) {

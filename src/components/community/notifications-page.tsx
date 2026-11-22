@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { useCommunity } from '@/components/session/community-provider';
-import { api, errorMessage } from '@/utils/api/client';
+import { RelativeTime } from '@/components/ui/relative-time';
+import { api, errorMessage, notificationsChangeEvent } from '@/utils/api/client';
 
 type Notification = {
   id: string;
@@ -24,13 +25,14 @@ const typeLabels: Record<string, string> = {
 export function NotificationsPage() {
   const router = useRouter();
   const { ready, user } = useCommunity();
+  const signedIn = Boolean(user);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!ready) return;
-    if (!user) {
+    if (!signedIn) {
       router.replace('/login?next=/notifications');
       return;
     }
@@ -38,11 +40,12 @@ export function NotificationsPage() {
       .then((result) => setNotifications(result.notifications))
       .catch((loadError) => setError(errorMessage(loadError, 'Could not load notifications')))
       .finally(() => setLoading(false));
-  }, [ready, router, user]);
+  }, [ready, router, signedIn]);
 
   async function markRead() {
     try {
       await api('/api/notifications', { method: 'PATCH', body: '{}' });
+      window.dispatchEvent(new Event(notificationsChangeEvent));
       setNotifications((current) => current.map((item) => ({ ...item, is_read: true })));
     } catch (markError) {
       setError(errorMessage(markError, 'Could not mark notifications as read'));
@@ -82,7 +85,7 @@ export function NotificationsPage() {
                   <strong>{typeLabels[item.type || ''] || 'Community update'}</strong>
                   <p>{item.message || 'There is new activity in the community.'}</p>
                   <small>
-                    {item.created_at ? new Date(item.created_at).toLocaleString() : 'Recently'}
+                    <RelativeTime value={item.created_at} />
                   </small>
                 </div>
               </>
