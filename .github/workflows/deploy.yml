@@ -56,11 +56,24 @@ jobs:
         if: inputs.migrate
         env:
           DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+          POOLER_HOST: ${{ vars.SUPABASE_POOLER_HOST || 'aws-1-ap-northeast-1.pooler.supabase.com' }}
         run: |
           if [ -z "$DATABASE_URL" ]; then
             echo "::warning::SUPABASE_DB_URL is not set; skipping migrations."
             exit 0
           fi
+          case "$DATABASE_URL" in
+            postgres://* | postgresql://* | *'"postgres'* | *DATABASE_URL=*) ;;
+            *)
+              # Only the database password was given: connect through the IPv4 session pooler.
+              ref=$(printf '%s' "$SUPABASE_URL" | sed -E 's#^https://([a-z0-9]+)\.supabase\.co.*#\1#')
+              password=$(jq -rn --arg value "$DATABASE_URL" '$value | @uri')
+              echo "::add-mask::$password"
+              DATABASE_URL="postgresql://postgres.$ref:$password@$POOLER_HOST:5432/postgres?sslmode=require"
+              echo "Using the session pooler at $POOLER_HOST"
+              ;;
+          esac
+          export DATABASE_URL
           command -v psql >/dev/null || { sudo apt-get update -q && sudo apt-get install -yq postgresql-client; }
           bash scripts/migrate.sh
 
