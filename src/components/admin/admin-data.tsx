@@ -19,15 +19,15 @@ export type AdminUser = {
   last_seen_at?: string | null;
 };
 
-export type AdminTag = {
+export type AdminCategory = {
   id: string;
   name: string;
   slug: string;
   color: string;
   description?: string;
+  position?: number;
+  discussion_count?: number;
 };
-
-export type AdminCategory = AdminTag & { position?: number; discussion_count?: number };
 
 export type AdminGroup = { id: string; name: string; color: string };
 
@@ -44,7 +44,6 @@ export type AdminOverview = {
   users: AdminUser[];
   discussion_count: number;
   post_count: number;
-  tags: AdminTag[];
   categories: AdminCategory[];
   groups: AdminGroup[];
   reports: AdminReport[];

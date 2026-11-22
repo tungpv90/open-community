@@ -18,7 +18,6 @@ const sectionGroups = [
       { href: '/admin/groups', label: 'Groups', icon: '◍' },
       { href: '/admin/discussions', label: 'Discussions', icon: '▤' },
       { href: '/admin/categories', label: 'Categories', icon: '▦' },
-      { href: '/admin/tags', label: 'Tags', icon: '◇' },
       { href: '/admin/moderation', label: 'Moderation', icon: '!' },
     ],
   },

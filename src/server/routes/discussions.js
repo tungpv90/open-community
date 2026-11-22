@@ -3,19 +3,18 @@ import { findCategory, listCategories } from './categories.js';
 
 async function listDiscussions(request, supabase) {
   const select = encodeURIComponent(
-    '*,profiles:forum_profiles!forum_discussions_user_id_fkey(id,username,display_name,avatar_url,avatar_color),category:forum_categories(id,name,slug,color),discussion_tags:forum_discussion_tags(tag_id,tags:forum_tags(id,name,slug,color))',
+    '*,profiles:forum_profiles!forum_discussions_user_id_fkey(id,username,display_name,avatar_url,avatar_color),category:forum_categories(id,name,slug,color)',
   );
-  const [{ body }, { body: tags }, categories] = await Promise.all([
+  const [{ body }, categories] = await Promise.all([
     supabase.request(
       `/rest/v1/forum_discussions?select=${select}&order=is_pinned.desc,updated_at.desc&limit=50`,
       { method: 'GET' },
     ),
-    supabase.request('/rest/v1/forum_tags?select=*&order=position.asc', { method: 'GET' }),
     listCategories(supabase),
   ]);
 
   const authorization = request.headers.get('authorization') || '';
-  if (!authorization.startsWith('Bearer ')) return json({ discussions: body, tags, categories });
+  if (!authorization.startsWith('Bearer ')) return json({ discussions: body, categories });
 
   const { user, token } = await supabase.getUser(request);
   const { body: follows } = await supabase.request(
@@ -25,7 +24,6 @@ async function listDiscussions(request, supabase) {
   );
   const followedIds = new Set(follows.map((follow) => String(follow.discussion_id)));
   return json({
-    tags,
     categories,
     discussions: body.map((discussion) => ({
       ...discussion,
@@ -68,17 +66,6 @@ async function createDiscussion(request, supabase) {
     },
     token,
   );
-
-  if (input.tag_id && body[0]) {
-    await supabase.request(
-      '/rest/v1/forum_discussion_tags',
-      {
-        method: 'POST',
-        body: JSON.stringify({ discussion_id: body[0].id, tag_id: input.tag_id }),
-      },
-      token,
-    );
-  }
 
   return json({ discussion: body[0] }, 201);
 }

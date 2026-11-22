@@ -7,7 +7,7 @@ import { DiscussionCard } from '@/components/community/discussion-card';
 import { useCommunity } from '@/components/session/community-provider';
 import { defaultWelcome } from '@/lib/community-settings';
 import { normalizeCategory, normalizeDiscussion } from '@/lib/forum';
-import type { ForumCategory, ForumDiscussion, ForumTag } from '@/lib/forum';
+import type { ForumCategory, ForumDiscussion } from '@/lib/forum';
 import { api, errorMessage } from '@/utils/api/client';
 
 type Filter = 'all' | 'following' | 'unanswered' | 'popular';
@@ -25,11 +25,9 @@ export function ForumHome() {
   const { settings, user } = useCommunity();
   const [loadError, setLoadError] = useState('');
   const [discussions, setDiscussions] = useState<ForumDiscussion[]>([]);
-  const [tags, setTags] = useState<ForumTag[]>([]);
   const [categories, setCategories] = useState<ForumCategory[]>([]);
   const [category, setCategory] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
-  const [tag, setTag] = useState('');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<Sort>('latest');
   const [loading, setLoading] = useState(true);
@@ -39,9 +37,7 @@ export function ForumHome() {
   }, []);
 
   useEffect(() => {
-    api<{ discussions: Record<string, any>[]; tags: ForumTag[]; categories?: unknown[] }>(
-      '/api/discussions',
-    )
+    api<{ discussions: Record<string, any>[]; categories?: unknown[] }>('/api/discussions')
       .then((result) => {
         setDiscussions(result.discussions.map(normalizeDiscussion));
         setCategories(
@@ -49,7 +45,6 @@ export function ForumHome() {
             .map(normalizeCategory)
             .filter((item): item is ForumCategory => Boolean(item)),
         );
-        setTags(result.tags || []);
         setLoadError('');
       })
       .catch((error) => setLoadError(errorMessage(error, 'Could not load discussions')))
@@ -61,7 +56,6 @@ export function ForumHome() {
   const visible = useMemo(() => {
     let result = discussions.filter((discussion) => {
       if (activeCategory && discussion.category?.slug !== activeCategory.slug) return false;
-      if (tag && discussion.tag?.slug !== tag) return false;
       if (filter === 'following' && !discussion.following) return false;
       if (filter === 'unanswered' && discussion.replies > 0) return false;
       if (filter === 'popular' && discussion.views < 250) return false;
@@ -82,7 +76,7 @@ export function ForumHome() {
       return b.updatedAt - a.updatedAt;
     });
     return result;
-  }, [activeCategory, discussions, filter, query, sort, tag]);
+  }, [activeCategory, discussions, filter, query, sort]);
 
   const replies = discussions.reduce((total, discussion) => total + discussion.replies, 0);
   const trending = [...discussions].sort((a, b) => b.views - a.views).slice(0, 3);
@@ -94,7 +88,6 @@ export function ForumHome() {
 
   function selectFilter(next: Filter) {
     setFilter(next);
-    setTag('');
     selectCategory('');
   }
 
@@ -114,7 +107,7 @@ export function ForumHome() {
             ] as const
           ).map(([value, label]) => (
             <button
-              className={filter === value && !tag && !category ? 'active' : ''}
+              className={filter === value && !category ? 'active' : ''}
               type="button"
               onClick={() => selectFilter(value)}
               key={value}
@@ -138,7 +131,6 @@ export function ForumHome() {
                   title={item.description || undefined}
                   onClick={() => {
                     selectCategory(category === item.slug ? '' : item.slug);
-                    setTag('');
                     setFilter('all');
                   }}
                   key={item.id}
@@ -146,29 +138,6 @@ export function ForumHome() {
                   <i style={{ backgroundColor: item.color }} />
                   {item.name}
                   <small>{item.discussion_count ?? 0}</small>
-                </button>
-              ))}
-            </nav>
-          </>
-        ) : null}
-
-        {tags.length ? (
-          <>
-            <h2 className="sidebar-title">Browse by tag</h2>
-            <nav className="filter-nav tag-nav" aria-label="Discussion tags">
-              {tags.map((item) => (
-                <button
-                  className={tag === item.slug ? 'active' : ''}
-                  type="button"
-                  onClick={() => {
-                    setTag(item.slug);
-                    setFilter('all');
-                    selectCategory('');
-                  }}
-                  key={item.slug}
-                >
-                  <i style={{ backgroundColor: item.color }} />
-                  {item.name}
                 </button>
               ))}
             </nav>
@@ -204,11 +173,9 @@ export function ForumHome() {
             <h2>
               {activeCategory
                 ? activeCategory.name
-                : tag
-                  ? tags.find((item) => item.slug === tag)?.name
-                  : filter === 'all'
-                    ? 'All discussions'
-                    : filter[0].toUpperCase() + filter.slice(1)}
+                : filter === 'all'
+                  ? 'All discussions'
+                  : filter[0].toUpperCase() + filter.slice(1)}
             </h2>
             <p>{activeCategory?.description || 'Fresh conversations from across the community'}</p>
           </div>

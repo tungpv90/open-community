@@ -34,7 +34,6 @@ const requiredPages = [
   '/admin/groups/page',
   '/admin/discussions/page',
   '/admin/categories/page',
-  '/admin/tags/page',
   '/admin/moderation/page',
   '/admin/settings/page',
   '/admin/appearance/page',

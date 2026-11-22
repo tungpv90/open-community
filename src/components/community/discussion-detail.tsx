@@ -220,8 +220,6 @@ export function DiscussionDetail({ discussionId }: { discussionId: string }) {
           <Link href={`/?category=${encodeURIComponent(discussion.category.slug)}`}>
             {discussion.category.name}
           </Link>
-        ) : discussion.tag ? (
-          <span>{discussion.tag.name}</span>
         ) : null}
       </nav>
       <header className="discussion-header">
@@ -232,14 +230,6 @@ export function DiscussionDetail({ discussionId }: { discussionId: string }) {
               style={{ '--tag-color': discussion.category.color } as CSSProperties}
             >
               {discussion.category.name}
-            </span>
-          ) : null}{' '}
-          {discussion.tag ? (
-            <span
-              className="tag-pill"
-              style={{ '--tag-color': discussion.tag.color } as CSSProperties}
-            >
-              {discussion.tag.name}
             </span>
           ) : null}
           <h1>{discussion.title}</h1>

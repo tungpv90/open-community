@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
 
 import {
   ActionMessage,
@@ -11,21 +10,11 @@ import {
   useAdminAction,
   useAdminData,
 } from '@/components/admin/admin-data';
-import type { AdminReport, AdminTag } from '@/components/admin/admin-data';
-import { ColorField } from '@/components/admin/form-controls';
+import type { AdminReport } from '@/components/admin/admin-data';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { normalizeDiscussion } from '@/lib/forum';
 import type { ForumDiscussion } from '@/lib/forum';
 import { api, errorMessage } from '@/utils/api/client';
-
-function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
-}
 
 export function DiscussionsPanel() {
   const { reload } = useAdminData();
@@ -149,148 +138,6 @@ export function DiscussionsPanel() {
               setMessage(null);
             }}
           />
-        </>
-      )}
-    </AdminPage>
-  );
-}
-
-function TagRow({
-  tag,
-  busy,
-  save,
-}: {
-  tag: AdminTag;
-  busy: boolean;
-  save: (tag: AdminTag | null, values: { name: string; slug: string; color: string }) => void;
-}) {
-  const [name, setName] = useState(tag.name);
-  const [slug, setSlug] = useState(tag.slug);
-  const [color, setColor] = useState(tag.color);
-  const dirty = name !== tag.name || slug !== tag.slug || color !== tag.color;
-
-  return (
-    <form
-      className="tag-admin-row"
-      onSubmit={(event) => {
-        event.preventDefault();
-        save(tag, { name, slug, color });
-      }}
-    >
-      <ColorField label={`Color for ${tag.name}`} value={color} onChange={setColor} compact />
-      <input
-        aria-label={`Name for ${tag.name}`}
-        value={name}
-        minLength={2}
-        maxLength={60}
-        required
-        onChange={(event) => setName(event.target.value)}
-      />
-      <input
-        aria-label={`Slug for ${tag.name}`}
-        value={slug}
-        required
-        onChange={(event) => setSlug(event.target.value)}
-      />
-      <button className="table-action" type="submit" disabled={busy || !dirty}>
-        Save
-      </button>
-    </form>
-  );
-}
-
-export function TagsPanel() {
-  const { reload } = useAdminData();
-  const { busy, message, run } = useAdminAction();
-  const [name, setName] = useState('');
-  const [slug, setSlug] = useState('');
-  const [slugEdited, setSlugEdited] = useState(false);
-  const [color, setColor] = useState('#e7672e');
-
-  function save(tag: AdminTag | null, values: { name: string; slug: string; color: string }) {
-    void run(
-      async () => {
-        await api(tag ? `/api/admin/tags/${encodeURIComponent(tag.id)}` : '/api/admin/tags', {
-          method: tag ? 'PATCH' : 'POST',
-          body: JSON.stringify({ ...values, name: values.name.trim(), slug: slugify(values.slug) }),
-        });
-        await reload();
-      },
-      tag ? `${values.name.trim()} updated` : `${values.name.trim()} created`,
-    ).then((ok) => {
-      if (ok && !tag) {
-        setName('');
-        setSlug('');
-        setSlugEdited(false);
-      }
-    });
-  }
-
-  function create(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    save(null, { name, slug, color });
-  }
-
-  return (
-    <AdminPage>
-      {(data) => (
-        <>
-          <PageHeading
-            eyebrow="Organization"
-            title="Tags"
-            copy="Shape how members browse and categorize discussions."
-          />
-          <ActionMessage message={message} />
-          <section className="admin-grid-two">
-            <form className="admin-card admin-form" onSubmit={create}>
-              <h2>Create tag</h2>
-              <label>
-                <span>Name</span>
-                <input
-                  value={name}
-                  minLength={2}
-                  maxLength={60}
-                  required
-                  onChange={(event) => {
-                    setName(event.target.value);
-                    if (!slugEdited) setSlug(slugify(event.target.value));
-                  }}
-                />
-              </label>
-              <label>
-                <span>Slug</span>
-                <input
-                  value={slug}
-                  required
-                  onChange={(event) => {
-                    setSlug(event.target.value);
-                    setSlugEdited(true);
-                  }}
-                />
-              </label>
-              <ColorField label="Color" value={color} onChange={setColor} />
-              <button className="button button-primary" type="submit" disabled={busy}>
-                Create tag
-              </button>
-            </form>
-            <div className="admin-card">
-              <h2>Existing tags</h2>
-              <div className="tag-admin-list">
-                {data.tags.length ? (
-                  data.tags.map((tag) => (
-                    <TagRow
-                      key={`${tag.id}-${tag.name}-${tag.slug}-${tag.color}`}
-                      tag={tag}
-                      busy={busy}
-                      save={save}
-                    />
-                  ))
-                ) : (
-                  <p className="admin-muted">No tags yet.</p>
-                )}
-              </div>
-            </div>
-          </section>
         </>
       )}
     </AdminPage>

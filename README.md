@@ -4,8 +4,8 @@ A Flarum-inspired community forum built with Next.js 15, Supabase authentication
 
 ## Features
 
-- Discussion feed, tags, search, sorting, replies, likes, follows, notifications, and dark mode.
-- Administration for community settings, appearance, users, groups, tags, discussions, and moderation.
+- Discussion feed, categories, search, sorting, replies, likes, follows, notifications, and dark mode.
+- Administration for community settings, appearance, users, groups, categories, discussions, and moderation.
 - Accounts in a dedicated Supabase project (`auth.users`), with administrators listed in `public.user_roles`.
 - Sample discussions when the Supabase API is unavailable.
 - Non-root, read-only Docker runtime with a health check.
@@ -26,7 +26,7 @@ src/
     discussions/[id]/          /discussions/:id       Discussion, replies, likes, follow
     discussions/[id]/edit/     /discussions/:id/edit  Admin-only editing
     admin/                     /admin, /admin/users, /admin/groups, /admin/discussions,
-                               /admin/tags, /admin/moderation, /admin/settings,
+                               /admin/categories, /admin/moderation, /admin/settings,
                                /admin/appearance, /admin/header, /admin/email
     api/[...path]/route.ts     JSON API (delegates to src/server/routes)
   components/                  React components by feature (admin, community, editor, session, ui)

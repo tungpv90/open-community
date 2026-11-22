@@ -1,13 +1,5 @@
 import { contentExcerpt } from '@/lib/rich-content';
 
-export type ForumTag = {
-  id?: string;
-  name: string;
-  slug: string;
-  color: string;
-  description?: string;
-};
-
 export type ForumCategory = {
   id: string;
   name: string;
@@ -43,7 +35,6 @@ export type ForumDiscussion = {
   excerpt: string;
   content: string;
   author: ForumAuthor;
-  tag: ForumTag | null;
   /** The discussion's category; absent only for legacy rows. */
   category: ForumCategory | null;
   createdAt: string;
@@ -87,7 +78,6 @@ export function normalizeCategory(input: unknown): ForumCategory | null {
 
 export function normalizeDiscussion(input: Record<string, any>): ForumDiscussion {
   const profile = input.profiles || {};
-  const linkedTag = input.discussion_tags?.[0]?.tags;
   const name = profile.display_name || profile.username || 'Member';
 
   return {
@@ -101,7 +91,6 @@ export function normalizeDiscussion(input: Record<string, any>): ForumDiscussion
       initials: initials(name),
       color: profile.avatar_color || '#6c5ce7',
     },
-    tag: linkedTag || null,
     category: normalizeCategory(input.category),
     createdAt: input.created_at
       ? new Date(input.created_at).toLocaleDateString('en-US')

@@ -86,10 +86,6 @@ export function OverviewPanel() {
                         : 'Create one to allow new discussions'}
                     </span>
                   </p>
-                  <p>
-                    <i className="good" />
-                    Tags<span>{data.tags.length} configured</span>
-                  </p>
                 </div>
               </div>
             </section>

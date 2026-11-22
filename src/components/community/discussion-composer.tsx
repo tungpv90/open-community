@@ -8,7 +8,7 @@ import type { FormEvent } from 'react';
 import { RichEditor } from '@/components/editor/rich-editor';
 import { useCommunity } from '@/components/session/community-provider';
 import { normalizeCategory } from '@/lib/forum';
-import type { ForumCategory, ForumTag } from '@/lib/forum';
+import type { ForumCategory } from '@/lib/forum';
 import { api, errorMessage } from '@/utils/api/client';
 
 type ComposerProps = { mode: 'create' } | { mode: 'edit'; discussionId: string };
@@ -26,8 +26,6 @@ export function DiscussionComposer(props: ComposerProps) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [initialContent, setInitialContent] = useState<string | null>(editing ? null : '');
-  const [tagId, setTagId] = useState('');
-  const [tags, setTags] = useState<ForumTag[]>([]);
   const [categoryId, setCategoryId] = useState('');
   const [categories, setCategories] = useState<ForumCategory[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -39,20 +37,13 @@ export function DiscussionComposer(props: ComposerProps) {
 
   useEffect(() => {
     if (!ready || !user) return;
-    api<{ discussions: Record<string, any>[]; tags: ForumTag[]; categories?: unknown[] }>(
-      '/api/discussions',
-    )
+    api<{ discussions: Record<string, any>[]; categories?: unknown[] }>('/api/discussions')
       .then((result) => {
         setCategories(
           (result.categories || [])
             .map(normalizeCategory)
             .filter((category): category is ForumCategory => Boolean(category)),
         );
-        const remoteTags = (result.tags || []).filter((tag) => tag.id);
-        if (remoteTags.length) {
-          setTags(remoteTags);
-          setTagId((current) => current || String(remoteTags[0].id));
-        }
         if (editing) {
           const match = result.discussions.find((item) => String(item.id) === discussionId);
           if (!match) throw new Error('Discussion not found');
@@ -94,7 +85,6 @@ export function DiscussionComposer(props: ComposerProps) {
             title,
             content,
             category_id: categoryId,
-            tag_id: tagId || null,
           }),
         });
         router.push(`/discussions/${encodeURIComponent(result.discussion.id)}`);
@@ -185,18 +175,6 @@ export function DiscussionComposer(props: ComposerProps) {
             </small>
           ) : null}
         </label>
-        {editing || !tags.length ? null : (
-          <label>
-            <span>Tag</span>
-            <select value={tagId} onChange={(event) => setTagId(event.target.value)}>
-              {tags.map((tag) => (
-                <option value={tag.id || ''} key={tag.slug}>
-                  {tag.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
         <div className="composer-field">
           <span id="composer-content-label">Content</span>
           {initialContent === null ? (

@@ -71,12 +71,10 @@
   text-transform: uppercase;
 }
 
-.tag-nav,
 .category-nav {
   margin-top: 0;
 }
 
-.tag-nav button i,
 .category-nav button i {
   width: 9px;
   height: 9px;
@@ -701,7 +699,6 @@
 
   .forum-sidebar > .button,
   .sidebar-title,
-  .tag-nav,
   .sidebar-callout {
     display: none;
   }

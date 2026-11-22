@@ -3,31 +3,28 @@ import { findCategory, listCategories, parseCategoryInput } from './categories.j
 
 async function handleAdminOverview(request, supabase) {
   const { token } = await supabase.getAdmin(request);
-  const [users, discussions, posts, tags, groups, reports, settings, categories] =
-    await Promise.all([
-      supabase.request('/rest/v1/rpc/forum_admin_users', { method: 'POST', body: '{}' }, token),
-      supabase.request('/rest/v1/forum_discussions?select=id', { method: 'GET' }, token),
-      supabase.request('/rest/v1/forum_posts?select=id', { method: 'GET' }, token),
-      supabase.request('/rest/v1/forum_tags?select=*&order=position.asc', { method: 'GET' }, token),
-      supabase.request(
-        '/rest/v1/forum_groups?select=*&order=created_at.asc',
-        { method: 'GET' },
-        token,
-      ),
-      supabase.request(
-        '/rest/v1/forum_reports?select=*&order=created_at.desc&limit=50',
-        { method: 'GET' },
-        token,
-      ),
-      supabase.request('/rest/v1/forum_settings?select=*', { method: 'GET' }, token),
-      listCategories(supabase, token),
-    ]);
+  const [users, discussions, posts, groups, reports, settings, categories] = await Promise.all([
+    supabase.request('/rest/v1/rpc/forum_admin_users', { method: 'POST', body: '{}' }, token),
+    supabase.request('/rest/v1/forum_discussions?select=id', { method: 'GET' }, token),
+    supabase.request('/rest/v1/forum_posts?select=id', { method: 'GET' }, token),
+    supabase.request(
+      '/rest/v1/forum_groups?select=*&order=created_at.asc',
+      { method: 'GET' },
+      token,
+    ),
+    supabase.request(
+      '/rest/v1/forum_reports?select=*&order=created_at.desc&limit=50',
+      { method: 'GET' },
+      token,
+    ),
+    supabase.request('/rest/v1/forum_settings?select=*', { method: 'GET' }, token),
+    listCategories(supabase, token),
+  ]);
 
   return json({
     users: users.body,
     discussion_count: discussions.body.length,
     post_count: posts.body.length,
-    tags: tags.body,
     categories,
     groups: groups.body,
     reports: reports.body,
@@ -156,62 +153,9 @@ async function deleteDiscussion(request, discussionId, supabase) {
     { method: 'DELETE' },
     token,
   );
-  await supabase.request(
-    `/rest/v1/forum_discussion_tags?discussion_id=eq.${id}`,
-    { method: 'DELETE' },
-    token,
-  );
   await supabase.request(`/rest/v1/forum_discussions?id=eq.${id}`, { method: 'DELETE' }, token);
 
   return json({ ok: true });
-}
-
-async function createTag(request, supabase) {
-  const { token } = await supabase.getAdmin(request);
-  const input = await request.json().catch(() => ({}));
-  const name = String(input.name || '').trim();
-  const slug = String(input.slug || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, '-');
-  if (name.length < 2 || !slug) return json({ error: 'Tag name and slug are required' }, 422);
-  const { body } = await supabase.request(
-    '/rest/v1/forum_tags?select=*',
-    {
-      method: 'POST',
-      headers: { prefer: 'return=representation' },
-      body: JSON.stringify({
-        name,
-        slug,
-        color: input.color || '#e7672e',
-        description: input.description || '',
-      }),
-    },
-    token,
-  );
-
-  return json({ tag: body[0] }, 201);
-}
-
-async function updateTag(request, tagId, supabase) {
-  const { token } = await supabase.getAdmin(request);
-  const input = await request.json().catch(() => ({}));
-  const name = String(input.name || '').trim();
-  const slug = String(input.slug || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, '-');
-  if (name.length < 2 || !slug) return json({ error: 'Tag name and slug are required' }, 422);
-  const { body } = await supabase.request(
-    `/rest/v1/forum_tags?id=eq.${encodeURIComponent(tagId)}&select=*`,
-    {
-      method: 'PATCH',
-      headers: { prefer: 'return=representation' },
-      body: JSON.stringify({ name, slug, color: input.color || '#e7672e' }),
-    },
-    token,
-  );
-  return body[0] ? json({ tag: body[0] }) : json({ error: 'Tag not found' }, 404);
 }
 
 async function saveCategory(request, categoryId, supabase) {
@@ -354,19 +298,11 @@ async function handleAdminRoute(request, url, supabase) {
   if (url.pathname === '/api/admin/settings' && request.method === 'POST') {
     return saveAdminSettings(request, supabase);
   }
-  if (url.pathname === '/api/admin/tags' && request.method === 'POST') {
-    return createTag(request, supabase);
-  }
   if (url.pathname === '/api/admin/categories' && request.method === 'POST') {
     return saveCategory(request, null, supabase);
   }
   if (url.pathname === '/api/admin/groups' && request.method === 'POST') {
     return saveGroup(request, null, supabase);
-  }
-
-  const tagMatch = url.pathname.match(/^\/api\/admin\/tags\/([^/]+)$/);
-  if (tagMatch && request.method === 'PATCH') {
-    return updateTag(request, tagMatch[1], supabase);
   }
 
   const categoryMatch = url.pathname.match(/^\/api\/admin\/categories\/([^/]+)$/);
