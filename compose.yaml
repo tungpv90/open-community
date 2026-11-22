@@ -9,7 +9,7 @@ services:
     container_name: flarum-community
     restart: unless-stopped
     ports:
-      - '${FORUM_PORT:-3000}:3000'
+      - '${FORUM_BIND:-127.0.0.1}:${FORUM_PORT:-3000}:3000'
     environment:
       NODE_ENV: production
       PORT: 3000

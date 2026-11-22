@@ -1,0 +1,189 @@
+name: Deploy
+
+# Everything runs from here: Actions → Deploy → Run workflow.
+# 1. apply database migrations  2. configure Supabase Auth URLs
+# 3. ship the commit to the server  4. build and restart Docker  5. health checks
+on:
+  workflow_dispatch:
+    inputs:
+      migrate:
+        description: Apply database migrations
+        type: boolean
+        default: true
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: ${{ vars.PUBLIC_SITE_URL || 'https://community.apaxsoft.com' }}
+    env:
+      PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://community.apaxsoft.com' }}
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER || 'root' }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/open-community' }}
+      FORUM_PORT: ${{ vars.FORUM_PORT || '9081' }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required secrets
+        env:
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+        run: |
+          missing=''
+          [ -n "$DEPLOY_HOST" ] || missing="$missing DEPLOY_HOST"
+          [ -n "$SUPABASE_URL" ] || missing="$missing SUPABASE_URL"
+          [ -n "$SUPABASE_ANON_KEY" ] || missing="$missing SUPABASE_ANON_KEY"
+          [ -n "$DEPLOY_SSH_KEY$DEPLOY_PASSWORD" ] || missing="$missing DEPLOY_SSH_KEY|DEPLOY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets:$missing"
+            exit 1
+          fi
+
+      - name: Apply database migrations
+        if: inputs.migrate
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::warning::SUPABASE_DB_URL is not set; skipping migrations."
+            exit 0
+          fi
+          command -v psql >/dev/null || { sudo apt-get update -q && sudo apt-get install -yq postgresql-client; }
+          bash scripts/migrate.sh
+
+      - name: Configure Supabase Auth URLs
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "::warning::SUPABASE_ACCESS_TOKEN is not set; set Site URL and redirect URLs in the Supabase dashboard."
+            exit 0
+          fi
+          ref=$(printf '%s' "$SUPABASE_URL" | sed -E 's#^https://([a-z0-9]+)\.supabase\.co.*#\1#')
+          api="https://api.supabase.com/v1/projects/$ref/config/auth"
+          current=$(curl -fsS -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" "$api")
+          # Keep existing redirect URLs and add this site's.
+          allow=$(printf '%s' "$current" | jq -r --arg site "$PUBLIC_SITE_URL" '
+            [(.uri_allow_list // "" | split(",") | map(select(length > 0))),
+             [$site, ($site + "/**")]] | add | unique | join(",")')
+          jq -n --arg site "$PUBLIC_SITE_URL" --arg allow "$allow" \
+            '{site_url: $site, uri_allow_list: $allow}' |
+            curl -fsS -X PATCH -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              -H 'Content-Type: application/json' --data @- "$api" >/dev/null
+          echo "Supabase Auth: site_url=$PUBLIC_SITE_URL, redirects=$allow"
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          if [ -n "$DEPLOY_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            echo "::warning::DEPLOY_KNOWN_HOSTS is not set; trusting the key the server presents now."
+            ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" > ~/.ssh/known_hosts 2>/dev/null
+          fi
+          ssh-keygen -lf ~/.ssh/known_hosts
+          {
+            echo "Host deploy"
+            echo "  HostName $DEPLOY_HOST"
+            echo "  User $DEPLOY_USER"
+            echo "  Port $DEPLOY_PORT"
+            echo "  StrictHostKeyChecking yes"
+            echo "  ServerAliveInterval 30"
+          } > ~/.ssh/config
+          if [ -n "$DEPLOY_SSH_KEY" ]; then
+            printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+            chmod 600 ~/.ssh/deploy_key
+            echo "  IdentityFile ~/.ssh/deploy_key" >> ~/.ssh/config
+            echo "SSH_WRAPPER=" >> "$GITHUB_ENV"
+          else
+            sudo apt-get install -yq sshpass >/dev/null
+            echo "SSH_WRAPPER=sshpass -e" >> "$GITHUB_ENV"
+          fi
+          chmod 600 ~/.ssh/config
+
+      - name: Package release
+        env:
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          AUTH_OAUTH_PROVIDERS: ${{ vars.AUTH_OAUTH_PROVIDERS || 'google,facebook,linkedin' }}
+          TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
+        run: |
+          git archive --format=tar.gz -o release.tar.gz HEAD
+          {
+            echo "SUPABASE_URL=$SUPABASE_URL"
+            echo "SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY"
+            echo "PUBLIC_SITE_URL=$PUBLIC_SITE_URL"
+            echo "AUTH_OAUTH_PROVIDERS=$AUTH_OAUTH_PROVIDERS"
+            echo "TURNSTILE_SITE_KEY=$TURNSTILE_SITE_KEY"
+            echo "FORUM_BIND=127.0.0.1"
+            echo "FORUM_PORT=$FORUM_PORT"
+            echo "FORUM_IMAGE=flarum-community:latest"
+          } > release.env
+
+      - name: Upload, build and restart on the server
+        env:
+          SSHPASS: ${{ secrets.DEPLOY_PASSWORD }}
+        run: |
+          $SSH_WRAPPER scp release.tar.gz release.env deploy:/tmp/
+          $SSH_WRAPPER ssh deploy \
+            DEPLOY_PATH="$DEPLOY_PATH" FORUM_PORT="$FORUM_PORT" sh -s <<'REMOTE'
+          set -eu
+          case "$DEPLOY_PATH" in
+            /*/*) ;;
+            *) echo "Refusing to deploy into '$DEPLOY_PATH'; use a dedicated directory." >&2; exit 1 ;;
+          esac
+          SUDO=''
+          [ "$(id -u)" -eq 0 ] || SUDO='sudo'
+
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "Installing Docker"
+            curl -fsSL https://get.docker.com | $SUDO sh
+          fi
+          docker info >/dev/null 2>&1 || DOCKER="$SUDO docker"
+          DOCKER="${DOCKER:-docker}"
+
+          $SUDO mkdir -p "$DEPLOY_PATH"
+          $SUDO chown "$(id -u):$(id -g)" "$DEPLOY_PATH"
+          # Replace the source tree so files deleted in the repository disappear on the server.
+          find "$DEPLOY_PATH" -mindepth 1 -maxdepth 1 ! -name .env -exec rm -rf {} +
+          tar -xzf /tmp/release.tar.gz -C "$DEPLOY_PATH"
+          install -m 600 /tmp/release.env "$DEPLOY_PATH/.env"
+          rm -f /tmp/release.tar.gz /tmp/release.env
+
+          cd "$DEPLOY_PATH"
+          $DOCKER compose up -d --build --remove-orphans
+          for attempt in $(seq 1 40); do
+            if $DOCKER compose ps --format '{{.Status}}' | grep -q '(healthy)'; then break; fi
+            sleep 3
+          done
+          $DOCKER compose ps
+          if ! curl -fsS "http://127.0.0.1:$FORUM_PORT/api/health"; then
+            $DOCKER compose logs --tail=100 forum
+            exit 1
+          fi
+          echo
+          $DOCKER image prune -f >/dev/null
+          REMOTE
+
+      - name: Check public site
+        run: |
+          curl -fsS --retry 10 --retry-delay 5 --retry-all-errors "$PUBLIC_SITE_URL/api/health"
+          echo
+          curl -fsS "$PUBLIC_SITE_URL/api/categories" >/dev/null
+          echo "Deployed to $PUBLIC_SITE_URL"
