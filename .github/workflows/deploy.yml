@@ -34,7 +34,7 @@ jobs:
       FORUM_PORT: ${{ vars.FORUM_PORT || '9081' }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Check required secrets
         env:
