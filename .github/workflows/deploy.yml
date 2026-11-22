@@ -56,26 +56,57 @@ jobs:
         if: inputs.migrate
         env:
           DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
-          POOLER_HOST: ${{ vars.SUPABASE_POOLER_HOST || 'aws-1-ap-northeast-1.pooler.supabase.com' }}
+          POOLER_HOST: ${{ vars.SUPABASE_POOLER_HOST }}
         run: |
           if [ -z "$DATABASE_URL" ]; then
             echo "::warning::SUPABASE_DB_URL is not set; skipping migrations."
             exit 0
           fi
-          case "$DATABASE_URL" in
-            postgres://* | postgresql://* | *'"postgres'* | *DATABASE_URL=*) ;;
+          command -v psql >/dev/null || { sudo apt-get update -q && sudo apt-get install -yq postgresql-client; }
+
+          # Accept a full connection string or just the password; tolerate quotes and KEY= prefixes.
+          value=$(printf '%s' "$DATABASE_URL" | tr -d '\r\n' |
+            sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^[A-Z_]+=//; s/^["'\'']//; s/["'\'']$//')
+          ref=$(printf '%s' "$SUPABASE_URL" | sed -E 's#^https://([a-z0-9]+)\.supabase\.co.*#\1#')
+          url=''
+          case "$value" in
+            postgres://*@db.*.supabase.co* | postgresql://*@db.*.supabase.co*)
+              # Direct connections are IPv6-only and GitHub runners have no IPv6.
+              ref=$(printf '%s' "$value" | sed -E 's#.*@db\.([a-z0-9]+)\.supabase\.co.*#\1#')
+              password=$(printf '%s' "$value" | sed -E 's#^postgres(ql)?://[^:/]+:(.*)@db\.[a-z0-9]+\.supabase\.co.*$#\2#')
+              ;;
+            postgres://* | postgresql://*)
+              url="$value"
+              ;;
             *)
-              # Only the database password was given: connect through the IPv4 session pooler.
-              ref=$(printf '%s' "$SUPABASE_URL" | sed -E 's#^https://([a-z0-9]+)\.supabase\.co.*#\1#')
-              password=$(jq -rn --arg value "$DATABASE_URL" '$value | @uri')
-              echo "::add-mask::$password"
-              DATABASE_URL="postgresql://postgres.$ref:$password@$POOLER_HOST:5432/postgres?sslmode=require"
-              echo "Using the session pooler at $POOLER_HOST"
+              password=$(jq -rn --arg value "$value" '$value | @uri')
               ;;
           esac
-          export DATABASE_URL
-          command -v psql >/dev/null || { sudo apt-get update -q && sudo apt-get install -yq postgresql-client; }
-          bash scripts/migrate.sh
+
+          if [ -z "$url" ]; then
+            echo "::add-mask::$password"
+            # Find the IPv4 session pooler for this project's region.
+            candidates="$POOLER_HOST"
+            for region in ap-southeast-1 ap-northeast-1 ap-northeast-2 ap-south-1 ap-southeast-2 \
+              us-east-1 us-east-2 us-west-1 us-west-2 ca-central-1 sa-east-1 \
+              eu-west-1 eu-west-2 eu-west-3 eu-central-1 eu-central-2 eu-north-1; do
+              candidates="$candidates aws-1-$region.pooler.supabase.com aws-0-$region.pooler.supabase.com"
+            done
+            for host in $candidates; do
+              try="postgresql://postgres.$ref:$password@$host:5432/postgres?sslmode=require&connect_timeout=8"
+              if psql "$try" --no-psqlrc -tAc 'select 1' >/dev/null 2>&1; then
+                url="$try"
+                echo "Using the session pooler at $host"
+                break
+              fi
+            done
+            if [ -z "$url" ]; then
+              echo "::error::Could not connect to project $ref through any Supabase session pooler. Check SUPABASE_URL and the database password in SUPABASE_DB_URL."
+              exit 1
+            fi
+          fi
+
+          DATABASE_URL="$url" bash scripts/migrate.sh
 
       - name: Configure Supabase Auth URLs
         env:
