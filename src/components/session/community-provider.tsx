@@ -30,7 +30,7 @@ export type CommunityUser = {
   } | null;
 };
 
-type CommunityConfig = {
+export type CommunityConfig = {
   configured: boolean;
   settings: CommunitySettings;
   auth_providers: string[];
@@ -99,12 +99,17 @@ function applySettings(settings: CommunitySettings) {
   root.dataset.theme = storedTheme || (settings.dark ? 'dark' : 'light');
 }
 
-export function CommunityProvider({ children }: { children: ReactNode }) {
-  const [config, setConfig] = useState<CommunityConfig>({
-    configured: false,
-    settings: {},
-    auth_providers: [],
-  });
+const emptyConfig: CommunityConfig = { configured: false, settings: {}, auth_providers: [] };
+
+export function CommunityProvider({
+  children,
+  initialConfig = emptyConfig,
+}: {
+  children: ReactNode;
+  /** Configuration loaded on the server so the first paint already shows saved settings. */
+  initialConfig?: CommunityConfig;
+}) {
+  const [config, setConfig] = useState<CommunityConfig>(initialConfig);
   const [user, setUser] = useState<CommunityUser | null>(null);
   const [ready, setReady] = useState(false);
 
@@ -130,7 +135,8 @@ export function CommunityProvider({ children }: { children: ReactNode }) {
         setConfig(result);
         applySettings(result.settings || {});
       })
-      .catch(() => applySettings({}));
+      // The server already rendered the saved settings; keep them if the refresh fails.
+      .catch(() => undefined);
 
     void Promise.all([loadConfig, refreshUser()]).finally(() => setReady(true));
 
