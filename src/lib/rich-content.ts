@@ -44,7 +44,7 @@ function inlineRich(text: string) {
     const source = safeImageSource(url);
     return source
       ? token(
-          `<img class="rich-inline-image" src="${escapeHtml(source)}" alt="${escapeHtml(label)}">`,
+          `<img class="rich-inline-image" src="${escapeHtml(source)}" alt="${escapeHtml(label)}" loading="lazy" decoding="async">`,
         )
       : label;
   });
@@ -206,7 +206,7 @@ export function renderRichContent(value: string) {
     if (image && imageSource) {
       const label = escapeHtml(image[1] || 'Attached image');
       out.push(
-        `<figure><img src="${escapeHtml(imageSource)}" alt="${label}" loading="lazy"><figcaption>${label}</figcaption></figure>`,
+        `<figure><img src="${escapeHtml(imageSource)}" alt="${label}" loading="lazy" decoding="async"><figcaption>${label}</figcaption></figure>`,
       );
       continue;
     }
