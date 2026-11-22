@@ -2,7 +2,8 @@ name: Deploy
 
 # Everything runs from here: Actions → Deploy → Run workflow.
 # 1. apply database migrations  2. configure Supabase Auth URLs
-# 3. ship the commit to the server  4. build and restart Docker  5. health checks
+# 3. build the Docker image on the runner  4. load it on the server and restart  5. health checks
+# The image is built here, not on the server: a small server takes over 20 minutes to run next build.
 on:
   workflow_dispatch:
     inputs:
@@ -21,7 +22,7 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     environment:
       name: production
       url: ${{ vars.PUBLIC_SITE_URL || 'https://community.apaxsoft.com' }}
@@ -53,7 +54,10 @@ jobs:
           fi
 
       - name: Apply database migrations
+        id: migrate
         if: inputs.migrate
+        # Ship the site even when the database step fails; the last step reports it.
+        continue-on-error: true
         env:
           DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
           POOLER_HOST: ${{ vars.SUPABASE_POOLER_HOST }}
@@ -191,6 +195,34 @@ jobs:
           fi
           chmod 600 ~/.ssh/config
 
+      - name: Detect server architecture
+        env:
+          SSHPASS: ${{ secrets.DEPLOY_PASSWORD }}
+        run: |
+          arch=$($SSH_WRAPPER ssh deploy uname -m)
+          case "$arch" in
+            x86_64 | amd64) platform=linux/amd64 ;;
+            aarch64 | arm64) platform=linux/arm64 ;;
+            *) echo "::error::Unsupported server architecture: $arch"; exit 1 ;;
+          esac
+          echo "Server architecture: $arch ($platform)"
+          echo "IMAGE_PLATFORM=$platform" >> "$GITHUB_ENV"
+
+      - name: Set up QEMU
+        if: env.IMAGE_PLATFORM != 'linux/amd64'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        run: |
+          # The Dockerfile also runs the format check, tests and artifact validation.
+          docker buildx build --platform "$IMAGE_PLATFORM" --load \
+            -t flarum-community:latest -t "flarum-community:${GITHUB_SHA::12}" .
+          docker save flarum-community:latest "flarum-community:${GITHUB_SHA::12}" | gzip -1 > image.tar.gz
+          ls -lh image.tar.gz
+
       - name: Package release
         env:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -209,11 +241,12 @@ jobs:
             echo "FORUM_IMAGE=flarum-community:latest"
           } > release.env
 
-      - name: Upload, build and restart on the server
+      - name: Upload and restart on the server
         env:
           SSHPASS: ${{ secrets.DEPLOY_PASSWORD }}
         run: |
-          $SSH_WRAPPER scp release.tar.gz release.env deploy:/tmp/
+          $SSH_WRAPPER scp -C release.tar.gz release.env deploy:/tmp/
+          $SSH_WRAPPER scp image.tar.gz deploy:/tmp/open-community-image.tar.gz
           $SSH_WRAPPER ssh deploy \
             DEPLOY_PATH="$DEPLOY_PATH" FORUM_PORT="$FORUM_PORT" sh -s <<'REMOTE'
           set -eu
@@ -239,14 +272,18 @@ jobs:
           install -m 600 /tmp/release.env "$DEPLOY_PATH/.env"
           rm -f /tmp/release.tar.gz /tmp/release.env
 
+          echo "Loading the image built by the workflow"
+          gunzip -c /tmp/open-community-image.tar.gz | $DOCKER load
+          rm -f /tmp/open-community-image.tar.gz
+
           cd "$DEPLOY_PATH"
-          $DOCKER compose up -d --build --remove-orphans
+          $DOCKER compose up -d --no-build --force-recreate --remove-orphans
           for attempt in $(seq 1 40); do
             if $DOCKER compose ps --format '{{.Status}}' | grep -q '(healthy)'; then break; fi
             sleep 3
           done
           $DOCKER compose ps
-          if ! curl -fsS "http://127.0.0.1:$FORUM_PORT/api/health"; then
+          if ! curl -fsS --retry 5 --retry-delay 2 --retry-all-errors "http://127.0.0.1:$FORUM_PORT/api/health"; then
             $DOCKER compose logs --tail=100 forum
             exit 1
           fi
@@ -258,5 +295,15 @@ jobs:
         run: |
           curl -fsS --retry 10 --retry-delay 5 --retry-all-errors "$PUBLIC_SITE_URL/api/health"
           echo
-          curl -fsS "$PUBLIC_SITE_URL/api/categories" >/dev/null
           echo "Deployed to $PUBLIC_SITE_URL"
+          if curl -fsS "$PUBLIC_SITE_URL/api/categories" >/dev/null; then
+            echo "Database reads work"
+          else
+            echo "::warning::$PUBLIC_SITE_URL/api/categories failed; check the database schema and SUPABASE_ANON_KEY."
+          fi
+
+      - name: Report database migrations
+        if: always() && steps.migrate.outcome == 'failure'
+        run: |
+          echo "::error::The site was deployed, but database migrations failed. See the 'Apply database migrations' step."
+          exit 1

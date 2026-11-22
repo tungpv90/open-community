@@ -123,8 +123,9 @@ Everything runs from **Actions → Deploy → Run workflow** (`.github/workflows
 
 1. Applies database changes with `scripts/migrate.sh`: a fresh database gets `supabase-schema.sql`, then every file in `supabase/migrations/` runs once and is recorded in `public.schema_migrations`.
 2. Sets the Supabase Auth Site URL and adds the site to the redirect allow list.
-3. Uploads the selected commit over SSH, installs Docker on the server if it is missing, writes the server `.env`, rebuilds the container, and waits for it to report healthy.
-4. Checks `/api/health` on the server and on the public URL.
+3. Builds the Docker image on the GitHub runner (for the server's CPU architecture), so the server never runs `next build`.
+4. Uploads the image and the selected commit over SSH, installs Docker on the server if it is missing, writes the server `.env`, restarts the container, and waits for it to report healthy.
+5. Checks `/api/health` on the server and on the public URL. If the database step failed, the site is still deployed and the run ends with an error pointing at that step.
 
 Add these to the repository's `production` environment (Settings → Environments) once:
 
