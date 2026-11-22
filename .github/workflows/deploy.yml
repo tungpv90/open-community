@@ -73,40 +73,64 @@ jobs:
             postgres://*@db.*.supabase.co* | postgresql://*@db.*.supabase.co*)
               # Direct connections are IPv6-only and GitHub runners have no IPv6.
               ref=$(printf '%s' "$value" | sed -E 's#.*@db\.([a-z0-9]+)\.supabase\.co.*#\1#')
-              password=$(printf '%s' "$value" | sed -E 's#^postgres(ql)?://[^:/]+:(.*)@db\.[a-z0-9]+\.supabase\.co.*$#\2#')
+              raw=$(printf '%s' "$value" | sed -E 's#^postgres(ql)?://[^:/]+:(.*)@db\.[a-z0-9]+\.supabase\.co.*$#\2#')
               ;;
             postgres://* | postgresql://*)
               url="$value"
               ;;
             *)
-              password=$(jq -rn --arg value "$value" '$value | @uri')
+              raw="$value"
               ;;
           esac
 
           if [ -z "$url" ]; then
-            echo "::add-mask::$password"
+            echo "::add-mask::$raw"
+            uri() { jq -rn --arg value "$1" '$value | @uri'; }
+            decode() { jq -rn --arg value "$1" '$value | gsub("%(?<h>[0-9A-Fa-f]{2})"; "\(.h)" | ascii_downcase | explode | map(if . < 97 then . - 48 else . - 87 end) | .[0] * 16 + .[1] | [.] | implode)'; }
+            bare="${raw#[}"
+            bare="${bare%]}"
+            # The password may be URL-encoded already, need encoding, or keep the template's [ ].
+            passwords=''
+            for candidate in "$(uri "$(decode "$raw")")" "$(uri "$raw")" "$raw" "$(uri "$(decode "$bare")")" "$(uri "$bare")"; do
+              case " $passwords " in *" $candidate "*) ;; *) passwords="$passwords $candidate" ;; esac
+              echo "::add-mask::$candidate"
+            done
+
             # Find the IPv4 session pooler for this project's region.
-            candidates="$POOLER_HOST"
+            hosts="$POOLER_HOST"
             for region in ap-southeast-1 ap-northeast-1 ap-northeast-2 ap-south-1 ap-southeast-2 \
               us-east-1 us-east-2 us-west-1 us-west-2 ca-central-1 sa-east-1 \
               eu-west-1 eu-west-2 eu-west-3 eu-central-1 eu-central-2 eu-north-1; do
-              candidates="$candidates aws-1-$region.pooler.supabase.com aws-0-$region.pooler.supabase.com"
+              hosts="$hosts aws-1-$region.pooler.supabase.com aws-0-$region.pooler.supabase.com"
             done
-            for host in $candidates; do
-              try="postgresql://postgres.$ref:$password@$host:5432/postgres?sslmode=require&connect_timeout=8"
-              if output=$(psql "$try" --no-psqlrc -tAc 'select 1' 2>&1); then
-                url="$try"
-                echo "Using the session pooler at $host"
-                break
-              fi
+            first=${passwords# }
+            first=${first%% *}
+            pooler=''
+            for host in $hosts; do
+              output=$(psql "postgresql://postgres.$ref:$first@$host:5432/postgres?sslmode=require&connect_timeout=8" \
+                --no-psqlrc -tAc 'select 1' 2>&1) && { pooler="$host"; break; }
               # "Tenant not found" only means the project lives in another region.
               case "$output" in
                 *'not found'* | *'could not translate host'*) ;;
-                *) echo "$host: ${output//"$password"/***}" ;;
+                *) pooler="$host"; break ;;
               esac
             done
+            if [ -z "$pooler" ]; then
+              echo "::error::No Supabase session pooler knows project $ref. Check SUPABASE_URL."
+              exit 1
+            fi
+            echo "Using the session pooler at $pooler"
+
+            for candidate in $passwords; do
+              try="postgresql://postgres.$ref:$candidate@$pooler:5432/postgres?sslmode=require&connect_timeout=8"
+              if output=$(psql "$try" --no-psqlrc -tAc 'select 1' 2>&1); then
+                url="$try"
+                break
+              fi
+            done
             if [ -z "$url" ]; then
-              echo "::error::Could not connect to project $ref through any Supabase session pooler. Check SUPABASE_URL and the database password in SUPABASE_DB_URL."
+              echo "${output//"$candidate"/***}"
+              echo "::error::The database password in SUPABASE_DB_URL was rejected by project $ref. Copy it from Supabase → Project Settings → Database (or reset it there)."
               exit 1
             fi
           fi
